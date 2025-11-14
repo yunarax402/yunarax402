@@ -1,5 +1,18 @@
 # GitHub Upload Commands
 
+## ⚠️ IMPORTANT: Create Repository First!
+
+**Before pushing, you must create the repository on GitHub:**
+
+1. Go to https://github.com/new
+2. Repository name: `yunarax402`
+3. Description: `Multi-Chain Launchpad Analyzer - Open Source`
+4. Visibility: **Public** (recommended)
+5. **DO NOT** check "Initialize with README" (we already have one)
+6. Click "Create repository"
+
+Then follow the steps below.
+
 ## Quick Upload to GitHub
 
 ### Step 1: Navigate to Package Directory
@@ -22,9 +35,14 @@ git add .
 git commit -m "Initial open-source release v5.0.0 - No payment system, users provide own API keys"
 ```
 
-### Step 5: Add Remote
+### Step 5: Add Remote (only if not already added)
 ```bash
 git remote add origin https://github.com/yunarax402/yunarax402.git
+```
+
+If you get "remote origin already exists", use:
+```bash
+git remote set-url origin https://github.com/yunarax402/yunarax402.git
 ```
 
 ### Step 6: Push to GitHub
