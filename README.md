@@ -6,6 +6,10 @@
 
 Search - Analyze - Measure - Invest
 
+[![Website](https://img.shields.io/badge/Website-yunarax402.com-blue)](https://yunarax402.com)
+[![Docs](https://img.shields.io/badge/Docs-Read%20the%20Docs-green)](https://yunarax402.com/docs)
+[![Whitepaper](https://img.shields.io/badge/Whitepaper-Read%20Whitepaper-purple)](https://yunarax402.com/whitepaper)
+[![Twitter](https://img.shields.io/badge/Twitter-@YunaraX402-1DA1F2)](https://twitter.com/YunaraX402)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
