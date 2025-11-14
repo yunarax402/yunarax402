@@ -1,6 +1,6 @@
 # YunaraX402 - Open Source Version
 
-![YunaraX402 Banner](https://raw.githubusercontent.com/yunarax402/yunarax402/main/public/logobrain.png)
+![YunaraX402 Banner](https://raw.githubusercontent.com/yunarax402/yunarax402/main/public/banner.jpg)
 
 > **Multi-Chain Launchpad Analyzer with AI Trading Assistant**
 
