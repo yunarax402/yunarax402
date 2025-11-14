@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YunaraX402 Whitepaper</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@latest/css/boxicons.min.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" href="logobrain.png">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="header-left">
+                    <nav class="header-nav">
+                        <a class="nav-link" href="docs.html">Docs</a>
+                        <a class="nav-link nav-link-primary" href="whitepaper.html">Whitepaper</a>
+                        <a class="nav-link nav-link-icon" href="https://twitter.com/YunaraX402" target="_blank" rel="noopener">
+                            <img src="crypto-icons/X_icon.svg.png" alt="YunaraX402 on X" class="nav-link-icon-img">
+                        </a>
+                        <button id="notifications-toggle" class="notifications-btn nav-alerts" type="button" aria-label="Open notifications">
+                            <i class='bx bx-bell'></i>
+                            <span>Alerts</span>
+                            <span class="notifications-badge" id="notifications-count">0</span>
+                        </button>
+                    </nav>
+                </div>
+                <div class="header-center">
+                    <a href="index.html" class="logo">
+                        <img src="logobrain.png" alt="YunaraX402" class="logo-image">
+                        <h1 class="logo-text">YunaraX402</h1>
+                    </a>
+                </div>
+                <div class="header-right">
+                    <div id="user-account" class="user-account" style="display: none;" onclick="toggleUserMenu(event)">
+                        <div class="user-avatar" id="user-avatar">
+                            <img id="user-avatar-img" src="" alt="User" style="display: none;">
+                            <span id="user-avatar-initial">U</span>
+                        </div>
+                        <div class="user-info">
+                            <div class="user-name" id="user-name">User</div>
+                            <div class="user-wallet" id="user-wallet">0x0000...0000</div>
+                        </div>
+                        <div class="user-balance" id="user-balance">$0.00 USDC</div>
+                        <button class="user-menu-btn" onclick="event.stopPropagation(); toggleUserMenu(event)">▼</button>
+                    </div>
+                    <button id="login-button" class="btn-login" type="button">
+                        <span>🔐 Login with Google</span>
+                    </button>
+                    <div class="status-indicator">
+                        <span class="status-dot status-active"></span>
+                        <span class="status-label">API</span>
+                    </div>
+                    <div class="status-indicator">
+                        <span class="status-dot status-active"></span>
+                        <span class="status-label">Server</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div id="notifications-backdrop" class="notifications-backdrop"></div>
+    <div id="notifications-panel" class="notifications-panel" aria-hidden="true">
+        <div class="notifications-panel-header">
+            <h3>AI Alerts</h3>
+            <button id="notifications-clear" type="button">Clear</button>
+        </div>
+        <div class="notifications-list" id="notifications-list">
+            <div class="notifications-empty" id="notifications-empty">New AI token alerts will appear here.</div>
+        </div>
+    </div>
+
+    <main class="whitepaper-main">
+        <section class="whitepaper-hero">
+            <div class="container">
+                <div class="whitepaper-hero-content">
+                    <span class="whitepaper-badge">Official Whitepaper · Version 1.0 · November 8, 2025</span>
+                    <h1 class="whitepaper-title">YunaraX402: Agentic Intelligence for Multi-Chain Token Discovery</h1>
+                    <p class="whitepaper-subtitle">A comprehensive overview of the AI architecture, compute-unit based economy, and roadmap powering the YunaraX402 ecosystem.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="whitepaper-content">
+            <div class="container whitepaper-grid">
+                <aside class="whitepaper-toc">
+                    <h3>Contents</h3>
+                    <ol>
+                        <li><a href="#abstract">Abstract</a></li>
+                        <li><a href="#introduction">Introduction</a></li>
+                        <li><a href="#market">Market Context</a></li>
+                        <li><a href="#architecture">System Architecture</a></li>
+                        <li><a href="#compute">Compute Unit Economy</a></li>
+                        <li><a href="#sdk">SDK & Integrations</a></li>
+                        <li><a href="#roadmap">Roadmap</a></li>
+                        <li><a href="#conclusion">Conclusion</a></li>
+                    </ol>
+                </aside>
+
+                <article class="whitepaper-article">
+                    <section id="abstract" class="whitepaper-section">
+                        <h2>Abstract</h2>
+                        <p>YunaraX402 unifies real-time blockchain intelligence, subscription-based compute units, and agentic AI workflows to help traders and teams evaluate emerging tokens across Base, Ethereum, BNB Chain, and Solana. This whitepaper outlines the data ingestion pipeline, AI orchestration layer, risk-scoring heuristics, and monetization model that together deliver institutional-grade analysis through both the Yunara dashboard and the public SDK.</p>
+                    </section>
+
+                    <section id="introduction" class="whitepaper-section">
+                        <h2>Introduction</h2>
+                        <p>The crypto launchpad landscape produces hundreds of new tokens each day. While opportunities abound, due diligence remains fragmented across explorers, social feeds, and analytics dashboards. YunaraX402 introduces an AI-first approach: aggregate market data, evaluate security posture, and deliver actionable narratives within seconds. Built atop Coinbase’s x402 micropayment standard and Moralis infrastructure, Yunara transforms how investors and builders interpret early-stage assets.</p>
+                    </section>
+
+                    <section id="market" class="whitepaper-section">
+                        <h2>Market Context</h2>
+                        <p>Legacy oracles and manual research workflows cannot keep pace with multi-chain launches. Existing products either sacrifice speed, lack AI augmentation, or bottleneck insights behind central teams. YunaraX402 addresses these gaps with:</p>
+                        <ul>
+                            <li><strong>Unified discovery:</strong> Launchpad, DEX, holder, and social metrics fused into a single dataset.</li>
+                            <li><strong>Agentic analysis:</strong> Autonomous prompts tailor risk, opportunity, and watchlist guidance per token.</li>
+                            <li><strong>Programmable access:</strong> SDK endpoints that let funds, bots, and dApps trigger the same analyses powering the Yunara UI.</li>
+                        </ul>
+                    </section>
+
+                    <section id="architecture" class="whitepaper-section">
+                        <h2>System Architecture</h2>
+                        <h3>Data Ingestion</h3>
+                        <ul>
+                            <li>Moralis streams for market/launchpad statistics.</li>
+                            <li>DEXScreener for volume, liquidity, pricing.</li>
+                            <li>RugCheck and custom heuristics for contract safety.</li>
+                            <li>Helius RPC for Solana metadata and holder snapshots.</li>
+                            <li>Twitter/X and Grok API for community sentiment.</li>
+                        </ul>
+                        <h3>AI Orchestration</h3>
+                        <p>A multi-model strategy routes each request through Gemini 1.5 Flash, falling back to GPT-4 Turbo when required. Grok insights enrich narratives with real-time social context. Outputs are normalized into a structured JSON schema consumed by both the UI and SDK.</p>
+                        <h3>Risk & Metrics Engine</h3>
+                        <p>Yunara generates riskScore, securityScore, confidence, key metrics, and categorical opportunities/warnings. These feed the dashboard visualizations and the programmatic responses returned to partners.</p>
+                    </section>
+
+                    <section id="compute" class="whitepaper-section">
+                        <h2>Compute Unit Economy</h2>
+                        <p>Subscriptions convert USDC into monthly Compute Units (CU), enabling predictable usage and throttling abuse. Plans:</p>
+                        <table class="whitepaper-table">
+                            <thead>
+                                <tr><th>Plan</th><th>Monthly CU</th><th>Price (USDC)</th><th>Use Case</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>Starter</td><td>100</td><td>$10</td><td>Retail traders testing token scans</td></tr>
+                                <tr><td>Growth</td><td>250</td><td>$20</td><td>Active analysts needing daily coverage</td></tr>
+                                <tr><td>Pro</td><td>600</td><td>$50</td><td>Funds or research desks running automation</td></tr>
+                                <tr><td>Enterprise</td><td>1200</td><td>$100</td><td>Exchanges, brokers, or large teams</td></tr>
+                            </tbody>
+                        </table>
+                        <p>Each analysis consumes one CU. Usage is logged with timestamps, chains, and API keys to provide auditable reports.</p>
+                    </section>
+
+                    <section id="sdk" class="whitepaper-section">
+                        <h2>SDK & Integrations</h2>
+                        <p>The yunarax402 SDK exposes the same analysis pipeline used in-app. Partners authenticate with API keys and pay per CU. Core endpoints include:</p>
+                        <ul>
+                            <li><strong>POST /api/sdk/analyze:</strong> Trigger an AI analysis for any token with optional chain overrides.</li>
+                            <li><strong>GET /api/subscriptions/status:</strong> Monitor remaining CU, usage logs, and active plan details.</li>
+                            <li><strong>API key management:</strong> Generate, rotate, or revoke keys from the Yunara wallet dashboard.</li>
+                        </ul>
+                        <p>Use cases span automated due diligence, credit scoring for launchpads, algorithmic trading bots, and portfolio monitoring.</p>
+                    </section>
+
+                    <section id="roadmap" class="whitepaper-section">
+                        <h2>Roadmap</h2>
+                        <ul>
+                            <li><strong>Q4 2025:</strong> Database migration, analytics export API, enhanced watchlist automation.</li>
+                            <li><strong>Q1 2026:</strong> Real-time alerting, ensemble modeling with additional LLM providers.</li>
+                            <li><strong>Q2 2026:</strong> Governance dashboards, tokenized staking for discounted CU, expanded social coverage (Reddit, Telegram).</li>
+                        </ul>
+                    </section>
+
+                    <section id="conclusion" class="whitepaper-section">
+                        <h2>Conclusion</h2>
+                        <p>YunaraX402 merges AI reasoning, on-chain telemetry, and a flexible subscription economy to give crypto participants a decisive edge. By packaging analyses as both a first-party experience and an SDK, Yunara scales from individual traders to institutional desks. Future tokenization and governance modules will further align the community and data providers that power the platform.</p>
+                    </section>
+                </article>
+            </div>
+        </section>
+    </main>
+
+    <footer class="whitepaper-footer">
+        <div class="container">
+            <p>© 2025 YunaraX402 · Built with x402 Micropayments · Contact: support@yunara.ai</p>
+        </div>
+    </footer>
+
+    <script src="script.js" defer></script>
+</body>
+</html>

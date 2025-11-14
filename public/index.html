@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Multi-Chain Launchpad Token Analyzer - Track and analyze new cryptocurrency launches across BNB, Base, Ethereum, and Solana with AI-powered insights">
+    <meta name="keywords" content="cryptocurrency, token analyzer, launchpad, blockchain, AI analysis, x402">
+    <title>YunaraX402 | Multi-Chain Launchpad Analyzer</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Boxicons -->
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@latest/css/boxicons.min.css">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css?v=20241108">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="logobrain.png">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="header-left">
+                    <nav class="header-nav">
+                        <a class="nav-link" href="docs.html">Docs</a>
+                        <a class="nav-link nav-link-primary" href="whitepaper.html">Whitepaper</a>
+                        <a class="nav-link nav-link-icon" href="https://twitter.com/YunaraX402" target="_blank" rel="noopener" title="Follow us on X (Twitter)">
+                            <img src="crypto-icons/X_icon.svg.png" alt="YunaraX402 on X" class="nav-link-icon-img">
+                        </a>
+                        <a class="nav-link nav-link-icon" href="https://github.com/yunarax402/yunarax402" target="_blank" rel="noopener" title="View on GitHub">
+                            <i class='bx bxl-github'></i>
+                        </a>
+                        <button id="notifications-toggle" class="notifications-btn nav-alerts" type="button" aria-label="Open notifications">
+                            <span class="notification-button-content">
+                                <i class='bx bx-bell'></i>
+                                <span>Alerts</span>
+                                <span class="notifications-badge" id="notifications-count">0</span>
+                            </span>
+                        </button>
+                    </nav>
+                </div>
+                
+                <div class="header-center">
+                <a href="/" class="logo" onclick="goToHomepage(event)">
+                        <img src="logobrain.png" alt="YunaraX402" class="logo-image">
+                        <h1 class="logo-text">YunaraX402</h1>
+                </a>
+                </div>
+                
+                <div class="header-right">
+                    <!-- User Account (shown when logged in) -->
+                    <div id="user-account" class="user-account" style="display: none;" onclick="toggleUserMenu(event)">
+                        <div class="user-avatar" id="user-avatar">
+                            <img id="user-avatar-img" src="" alt="User" style="display: none;">
+                            <span id="user-avatar-initial">U</span>
+                        </div>
+                        <div class="user-info">
+                            <div class="user-name" id="user-name">User</div>
+                            <div class="user-wallet" id="user-wallet">0x0000...0000</div>
+                        </div>
+                        <div class="user-balance" id="user-balance">$0.00 USDC</div>
+                        <button class="user-menu-btn" onclick="event.stopPropagation(); toggleUserMenu(event)">▼</button>
+                    </div>
+                    
+                    <!-- Login Button (shown when not logged in) -->
+                    <button id="login-button" class="btn-login" type="button">
+                        <span>🔐 Login with Google</span>
+                    </button>
+                    
+                    <div class="status-indicator">
+                        <span class="status-dot status-active"></span>
+                        <span class="status-label">API</span>
+                    </div>
+                    
+                    <div class="status-indicator">
+                        <span class="status-dot status-active"></span>
+                        <span class="status-label">Server</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div id="notifications-backdrop" class="notifications-backdrop"></div>
+    <div id="notifications-panel" class="notifications-panel" aria-hidden="true">
+        <div class="notifications-panel-header">
+            <h3>AI Alerts</h3>
+            <button id="notifications-clear" type="button">Clear</button>
+        </div>
+        <div class="notifications-list" id="notifications-list">
+            <div class="notifications-empty" id="notifications-empty">New AI token alerts will appear here.</div>
+        </div>
+    </div>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-background"></div>
+        <!-- AI Agent Video (blended hero element) -->
+        <div id="agent-video-container" class="agent-video-container">
+            <video id="agent-video" class="agent-video" autoplay loop muted playsinline webkit-playsinline preload="auto" poster="chat-agent.png">
+                <source src="agent-video.mov" type="video/quicktime">
+                <source src="agent-video.mov" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+            <div class="video-overlay"></div>
+        </div>
+        <div class="container hero-content">
+            <h2 class="hero-title">Discover the Next 100x Token</h2>
+            <p class="hero-subtitle">Search. Analyze. Measure. Invest.</p>
+            
+            <!-- Search Bar -->
+            <div class="search-container">
+                <div class="search-box">
+                    <input 
+                        type="text" 
+                        id="search-input" 
+                        class="search-input" 
+                        placeholder="Search by contract address, token name or symbol..."
+                        onkeypress="if(event.key === 'Enter') searchToken()"
+                    >
+                </div>
+                <button class="search-button" onclick="searchToken()">
+                    <span class="btn-holo-text">Search</span>
+                </button>
+                <p class="search-hint">Try: "USDC", "0x...", or any token name</p>
+            </div>
+
+            <div class="hero-buttons">
+                <button class="btn-primary btn-secondary" onclick="openMemeScope()">
+                    <span>MEMESCOPE</span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="info-section">
+        <div class="container">
+            <h2 class="section-title">How It Works</h2>
+            <p class="section-intro">YunaraX402 uses AI-powered analysis to help you discover and evaluate new cryptocurrency tokens across multiple blockchains. Our platform aggregates data from launchpads, tracks KOL activity, and provides comprehensive token analysis.</p>
+            
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-number">
+                        <i class='bx bx-search-alt-2'></i>
+                    </div>
+                    <h3 class="step-title">Discover</h3>
+                    <p class="step-description">Browse trending tokens from Solana, Ethereum, BNB Chain, and Base. Use MEMESCOPE to see all chains or filter by specific blockchain.</p>
+                </div>
+                
+                <div class="step-card">
+                    <div class="step-number">
+                        <i class='bx bx-bar-chart-alt-2'></i>
+                    </div>
+                    <h3 class="step-title">Analyze</h3>
+                    <p class="step-description">Get real-time trading indicators including market cap, volume, holder count, price changes, and security scores from RugCheck.xyz.</p>
+                </div>
+                
+                <div class="step-card">
+                    <div class="step-number">
+                        <i class='bx bx-brain'></i>
+                    </div>
+                    <h3 class="step-title">AI Insights</h3>
+                    <p class="step-description">Leverage Yunara, our AI Trading Assistant powered by Moralis AI, for deep token analysis, risk assessment, and trading recommendations.</p>
+                </div>
+                
+                <div class="step-card">
+                    <div class="step-number">
+                        <i class='bx bx-radar'></i>
+                    </div>
+                    <h3 class="step-title">Track</h3>
+                    <p class="step-description">Monitor KOL trading activity, follow X (Twitter) crypto feeds, and build your watchlist to stay on top of opportunities.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technical Overview Section -->
+    <section class="info-section info-section-alt">
+        <div class="container">
+            <h2 class="section-title">Technical Overview</h2>
+            <p class="section-intro">YunaraX402 is built on modern web technologies and integrates with leading blockchain APIs to provide comprehensive token analysis across multiple chains.</p>
+            
+            <div class="tech-grid">
+                <div class="tech-card">
+                    <div class="tech-icon"><i class='bx bx-data'></i></div>
+                    <h3 class="tech-title">Data Sources</h3>
+                    <ul class="tech-list">
+                        <li>Moralis API (Multi-chain data)</li>
+                        <li>DEXScreener API</li>
+                        <li>RugCheck.xyz Security Analysis</li>
+                        <li>Helius RPC (Solana metadata)</li>
+                        <li>Twitter/X API Integration</li>
+                    </ul>
+                </div>
+                
+                <div class="tech-card">
+                    <div class="tech-icon"><i class='bx bx-chip'></i></div>
+                    <h3 class="tech-title">Blockchains</h3>
+                    <ul class="tech-list">
+                        <li>Solana (Mainnet)</li>
+                        <li>Ethereum (Mainnet)</li>
+                        <li>BNB Chain (BSC)</li>
+                        <li>Base Network</li>
+                    </ul>
+                </div>
+                
+                <div class="tech-card">
+                    <div class="tech-icon"><i class='bx bx-brain'></i></div>
+                    <h3 class="tech-title">AI & Analytics</h3>
+                    <ul class="tech-list">
+                        <li>Moralis AI Chat API</li>
+                        <li>Real-time price tracking</li>
+                        <li>Holder distribution analysis</li>
+                        <li>Volume & liquidity metrics</li>
+                        <li>Risk scoring algorithm</li>
+                    </ul>
+                </div>
+                
+                <div class="tech-card">
+                    <div class="tech-icon"><i class='bx bx-wallet'></i></div>
+                    <h3 class="tech-title">Payment System</h3>
+                    <ul class="tech-list">
+                        <li>x402 Protocol integration</li>
+                        <li>Multi-chain USDC payments</li>
+                        <li>Web3 wallet support</li>
+                        <li>Google OAuth authentication</li>
+                        <li>Encrypted wallet storage</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Integrations/Platform Animation Section -->
+    <section class="info-section integrations-section">
+        <div class="container">
+            <h2 class="section-title">Platform Architecture</h2>
+            <p class="section-intro">YunaraX402 Core at the center — ecosystems orbit in harmony</p>
+            
+            <div class="orbital-animation-container">
+                <!-- Starry Background -->
+                <div class="stars-background" id="stars-background"></div>
+                
+                <!-- Orbital System -->
+                <div class="orbital-system">
+                    <!-- Central Core -->
+                    <div class="orbital-core">
+                        <div class="core-glow"></div>
+                        <div class="core-inner">
+                            <div class="core-text">YunaraX402</div>
+                            <div class="core-subtext">Core</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Orbital Paths -->
+                    <svg class="orbital-paths" viewBox="0 0 600 600">
+                        <circle class="orbit-path orbit-1" cx="300" cy="300" r="120" fill="none" stroke="rgba(0, 212, 255, 0.3)" stroke-width="1" stroke-dasharray="5,5"/>
+                        <circle class="orbit-path orbit-2" cx="300" cy="300" r="180" fill="none" stroke="rgba(0, 212, 255, 0.25)" stroke-width="1" stroke-dasharray="5,5"/>
+                        <circle class="orbit-path orbit-3" cx="300" cy="300" r="240" fill="none" stroke="rgba(0, 212, 255, 0.2)" stroke-width="1" stroke-dasharray="5,5"/>
+                    </svg>
+                    
+                    <!-- Orbiting Elements -->
+                    <div class="orbital-element orbit-1" style="--orbit-speed: 20s; --start-angle: 0deg;">
+                        <div class="orbital-capsule">
+                            <i class='bx bx-brain'></i>
+                            <span>AI Analysis</span>
+                        </div>
+                    </div>
+                    
+                    <div class="orbital-element orbit-1" style="--orbit-speed: 20s; --start-angle: 120deg;">
+                        <div class="orbital-capsule">
+                            <i class='bx bx-network-chart'></i>
+                            <span>Multi-Chain</span>
+                        </div>
+                    </div>
+                    
+                    <div class="orbital-element orbit-1" style="--orbit-speed: 20s; --start-angle: 240deg;">
+                        <div class="orbital-capsule">
+                            <i class='bx bx-search-alt'></i>
+                            <span>Token Discovery</span>
+                        </div>
+                    </div>
+                    
+                    <div class="orbital-element orbit-2" style="--orbit-speed: 25s; --start-angle: 60deg;">
+                        <div class="orbital-capsule">
+                            <i class='bx bx-shield-quarter'></i>
+                            <span>Security</span>
+                        </div>
+                    </div>
+                    
+                    <div class="orbital-element orbit-2" style="--orbit-speed: 25s; --start-angle: 180deg;">
+                        <div class="orbital-capsule">
+                            <i class='bx bx-bar-chart-alt-2'></i>
+                            <span>Analytics</span>
+                        </div>
+                    </div>
+                    
+                    <div class="orbital-element orbit-2" style="--orbit-speed: 25s; --start-angle: 300deg;">
+                        <div class="orbital-capsule">
+                            <i class='bx bxl-twitter'></i>
+                            <span>X Tracker</span>
+                        </div>
+                    </div>
+                    
+                    <div class="orbital-element orbit-3" style="--orbit-speed: 30s; --start-angle: 90deg;">
+                        <div class="orbital-capsule">
+                            <i class='bx bx-wallet'></i>
+                            <span>Web3 Payments</span>
+                        </div>
+                    </div>
+                    
+                    <div class="orbital-element orbit-3" style="--orbit-speed: 30s; --start-angle: 270deg;">
+                        <div class="orbital-capsule">
+                            <i class='bx bx-data'></i>
+                            <span>Real-Time Data</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="info-section">
+        <div class="container">
+            <h2 class="section-title">Frequently Asked Questions</h2>
+            <p class="section-intro">Got questions? We've got answers. Here are some common questions about YunaraX402.</p>
+            
+            <div class="faq-container">
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFAQ(this)">
+                        <span>What is YunaraX402?</span>
+                        <i class='bx bx-chevron-down'></i>
+                    </div>
+                    <div class="faq-answer">
+                        <p>YunaraX402 is a multi-chain launchpad token analyzer that helps you discover and analyze new cryptocurrency tokens across Solana, Ethereum, BNB Chain, and Base. We provide AI-powered insights, real-time trading data, and KOL tracking to help you make informed trading decisions.</p>
+                    </div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFAQ(this)">
+                        <span>How does AI analysis work?</span>
+                        <i class='bx bx-chevron-down'></i>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Yunara, our AI Trading Assistant, uses Moralis AI to analyze token data, market metrics, holder distribution, and security scores. It provides comprehensive risk assessment, trading recommendations, and detailed insights about each token. AI analysis requires 1 Compute Unit from your active plan via the x402 protocol.</p>
+                    </div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFAQ(this)">
+                        <span>Which blockchains are supported?</span>
+                        <i class='bx bx-chevron-down'></i>
+                    </div>
+                    <div class="faq-answer">
+                        <p>YunaraX402 currently supports Solana, Ethereum, BNB Chain (BSC), and Base Network. You can search for tokens, view trending tokens, and analyze tokens from any of these chains. The platform automatically detects which blockchain a token belongs to based on its contract address format.</p>
+                    </div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFAQ(this)">
+                        <span>How do I get free AI analyses?</span>
+                        <i class='bx bx-chevron-down'></i>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Complete quests in the Quest Dashboard! Follow our Twitter (@yunaraX402), like a post, and comment on one post to unlock 10 free AI analyses. You can check your quest progress and claim rewards from your user dashboard.</p>
+                    </div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFAQ(this)">
+                        <span>Is my wallet information secure?</span>
+                        <i class='bx bx-chevron-down'></i>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Yes! When you log in with Google, we create encrypted wallets for you. Private keys are encrypted using AES-256-CBC encryption and stored securely. You can use these wallets to pay for AI analyses without connecting external wallets like MetaMask or Phantom.</p>
+                    </div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFAQ(this)">
+                        <span>What payment methods are accepted?</span>
+                        <i class='bx bx-chevron-down'></i>
+                    </div>
+                    <div class="faq-answer">
+                        <p>We accept USDC payments via the x402 protocol on Base, Ethereum, BNB Chain, and Solana networks. Payments are processed on-chain and verified automatically. You can fund your wallet directly from the Wallet Dashboard.</p>
+                    </div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFAQ(this)">
+                        <span>How often is token data updated?</span>
+                        <i class='bx bx-chevron-down'></i>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Token data is cached and updated regularly. Price data, volume, and holder counts are refreshed frequently. For the most up-to-date information, you can manually refresh data by clicking the refresh button or reloading the page.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- MEMESCOPE Dashboard -->
+    <section id="memescope-dashboard" class="memescope-dashboard" style="display: none;">
+        <div class="dashboard-container">
+            <!-- Dashboard Sidebar -->
+            <div class="blockchain-sidebar">
+                <h3 class="sidebar-title">New Dashboards</h3>
+                <div class="blockchain-list">
+                    <button class="blockchain-item" data-dashboard="quests" onclick="openQuestDashboard()">
+                        <i class='bx bx-task'></i>
+                        <span>Quests</span>
+                    </button>
+                    <button class="blockchain-item" data-dashboard="ai-analysis" onclick="openAIAnalysisDashboard()">
+                        <i class='bx bx-brain'></i>
+                        <span>AI Analysis</span>
+                    </button>
+                    <button class="blockchain-item" data-dashboard="watchlist" onclick="openWatchlistDashboard()">
+                        <i class='bx bxs-star blockchain-icon'></i>
+                        <span class="blockchain-name">Watchlist</span>
+                    </button>
+                    <button class="blockchain-item blockchain-item-ai-calls" data-dashboard="ai-token-calls" onclick="openAITokenCalls()">
+                        <i class='bx bx-brain blockchain-icon'></i>
+                        <span class="blockchain-name">AI Token Calls</span>
+                    </button>
+                </div>
+                
+                <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-color);">
+                    <h4 class="sidebar-title" style="font-size: 14px; margin-bottom: 12px; color: var(--text-secondary);">Blockchains</h4>
+                    <div class="blockchain-list">
+                    <button class="blockchain-item active" data-chain="all" onclick="selectBlockchain('all', true, true)">
+                            <i class='bx bx-globe blockchain-icon'></i>
+                            <span class="blockchain-name">All Chains</span>
+                        </button>
+                    <button class="blockchain-item" data-chain="solana" onclick="selectBlockchain('solana', true, true)">
+                            <img src="solana-logo.png" alt="Solana" class="blockchain-icon-img">
+                            <span class="blockchain-name">Solana</span>
+                        </button>
+                    <button class="blockchain-item" data-chain="bnb" onclick="selectBlockchain('bnb', true, true)">
+                            <img src="bnb-logo.png" alt="BNB" class="blockchain-icon-img">
+                            <span class="blockchain-name">BNB Chain</span>
+                        </button>
+                    <button class="blockchain-item" data-chain="base" onclick="selectBlockchain('base', true, true)">
+                            <img src="base-logo.png" alt="Base" class="blockchain-icon-img">
+                            <span class="blockchain-name">Base</span>
+                        </button>
+                    <button class="blockchain-item" data-chain="ethereum" onclick="selectBlockchain('ethereum', true, true)">
+                            <img src="eth_light_3.png" alt="Ethereum" class="blockchain-icon-img">
+                            <span class="blockchain-name">Ethereum</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Chain Volume Stats Featured Box -->
+                <div class="chain-volume-box" id="chain-volume-box" style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-color);">
+                    <h4 class="volume-box-title">
+                        <i class='bx bx-bar-chart-alt-2'></i> Chain Volume (24h)
+                    </h4>
+                    <div id="chain-volume-content" class="chain-volume-content">
+                        <div class="chain-volume-loading">
+                            <div class="spinner-small"></div>
+                            <span>Loading volume data...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tokens Content Area -->
+            <div class="tokens-content-area">
+                <div class="token-filter-bar" id="token-filter-bar">
+                    <div class="token-filter-card" data-filter-key="volumeMin">
+                        <div class="token-filter-card-header">
+                            <span class="token-filter-title">Volume</span>
+                            <span class="token-filter-subtitle">Set minimum 24h volume (USD)</span>
+                        </div>
+                        <div class="token-filter-input-wrapper">
+                            <span class="token-filter-prefix">$</span>
+                            <input
+                                id="token-filter-volume"
+                                class="token-filter-input"
+                                type="text"
+                                inputmode="decimal"
+                                placeholder="e.g. 250k"
+                                onfocus="prepareFilterInputEdit(this, 'volumeMin')"
+                                oninput="handleFilterInput('volumeMin', this.value)"
+                                onblur="formatFilterInputDisplay(this, 'volumeMin', 'currency')"
+                                autocomplete="off"
+                                spellcheck="false"
+                            />
+                            <span class="token-filter-suffix">USD</span>
+                        </div>
+                    </div>
+                    <div class="token-filter-card" data-filter-key="marketCapMin">
+                        <div class="token-filter-card-header">
+                            <span class="token-filter-title">Market Cap</span>
+                            <span class="token-filter-subtitle">Set minimum market cap (USD)</span>
+                        </div>
+                        <div class="token-filter-input-wrapper">
+                            <span class="token-filter-prefix">$</span>
+                            <input
+                                id="token-filter-marketcap"
+                                class="token-filter-input"
+                                type="text"
+                                inputmode="decimal"
+                                placeholder="e.g. 1.5m"
+                                onfocus="prepareFilterInputEdit(this, 'marketCapMin')"
+                                oninput="handleFilterInput('marketCapMin', this.value)"
+                                onblur="formatFilterInputDisplay(this, 'marketCapMin', 'currency')"
+                                autocomplete="off"
+                                spellcheck="false"
+                            />
+                            <span class="token-filter-suffix">USD</span>
+                        </div>
+                    </div>
+                    <div class="token-filter-card" data-filter-key="ageMaxDays">
+                        <div class="token-filter-card-header">
+                            <span class="token-filter-title">Age</span>
+                            <span class="token-filter-subtitle">Show tokens newer than (days)</span>
+                        </div>
+                        <div class="token-filter-input-wrapper">
+                            <span class="token-filter-prefix"><i class='bx bx-time-five'></i></span>
+                            <input
+                                id="token-filter-age"
+                                class="token-filter-input"
+                                type="text"
+                                inputmode="decimal"
+                                placeholder="e.g. 7"
+                                onfocus="prepareFilterInputEdit(this, 'ageMaxDays')"
+                                oninput="handleFilterInput('ageMaxDays', this.value)"
+                                onblur="formatFilterInputDisplay(this, 'ageMaxDays', 'days')"
+                                autocomplete="off"
+                                spellcheck="false"
+                            />
+                            <span class="token-filter-suffix">days</span>
+                        </div>
+                    </div>
+                    <div class="token-filter-actions">
+                        <button class="token-filter-reset" onclick="resetTokenFilters()" title="Reset filters">
+                            <i class='bx bx-refresh'></i> Reset
+                        </button>
+                    </div>
+                </div>
+                <div id="ai-token-calls-header" class="ai-token-calls-header" style="display: none;">
+                    <div class="ai-token-calls-header-left">
+                        <h3>AI Token Calls</h3>
+                        <button class="btn-refresh-ai-calls" onclick="refreshAITokenCalls()" title="Refresh AI Token Calls">
+                            <i class='bx bx-refresh'></i> Refresh
+                        </button>
+                    </div>
+                    <div class="ai-token-calls-header-right">
+                        <div id="ai-token-calls-performance"></div>
+                    </div>
+                </div>
+                <div id="loading-spinner" class="loading-spinner">
+                    <div class="spinner"></div>
+                    <p>Loading tokens from all chains...</p>
+                </div>
+                <div id="tokens-grid" class="tokens-grid"></div>
+                <div id="empty-state" class="empty-state" style="display: none;">
+                    <div class="empty-icon"><i class='bx bx-search'></i></div>
+                    <h3>No tokens found</h3>
+                    <p>Try selecting a different chain or refresh the page</p>
+                    <button class="btn-primary" onclick="loadTokens()">Refresh Tokens</button>
+                </div>
+            </div>
+
+            <!-- AI Call History Sidebar (shown only for AI Token Calls) -->
+            <div id="ai-call-history-sidebar" class="ai-call-history-sidebar" style="display: none;">
+                <div class="call-history-header-section">
+                    <h3 class="call-history-title">
+                        <i class='bx bx-history'></i> Call History
+                    </h3>
+                    <p class="call-history-subtitle">Top 10 AI Token Calls</p>
+                </div>
+                <div id="call-history-list" class="call-history-list">
+                    <div class="call-history-loading">
+                        <div class="spinner-small"></div>
+                        <span>Loading call history...</span>
+                    </div>
+                </div>
+            </div>
+            <div id="ai-token-paywall-overlay" class="ai-token-paywall-overlay">
+                <div class="ai-token-paywall-card">
+                    <div class="ai-token-paywall-icon">
+                        <i class='bx bx-lock-alt'></i>
+                    </div>
+                    <h3 id="ai-paywall-title">Unlock AI Token Calls</h3>
+                    <p id="ai-paywall-message">Subscribe to view live AI token calls and automated notifications.</p>
+                    <div class="ai-token-paywall-actions">
+                        <button id="ai-paywall-primary" class="btn-primary btn-large">View Plans</button>
+                        <button id="ai-paywall-secondary" class="btn-secondary btn-large">Login</button>
+                    </div>
+                    <p class="ai-token-paywall-note">Access includes AI alerts, real-time signals, and compute units for deep analysis.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Token Details Modal -->
+    <div id="token-details-modal" class="modal">
+        <div class="modal-overlay" onclick="closeTokenDetailsModal()"></div>
+        <div class="modal-content token-details-content">
+            <button class="modal-close" onclick="closeTokenDetailsModal()">&times;</button>
+            <div id="token-details-body">
+                <div class="loading-spinner">
+                    <div class="spinner"></div>
+                    <p>Loading token details...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analysis Modal -->
+    <div id="analysis-modal" class="modal">
+        <div class="modal-overlay" onclick="closeModal()"></div>
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+            <div id="modal-body">
+                <!-- Content loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Open-source: Payment modal removed - no payment required -->
+    <!-- Subscription Modal removed for open-source version -->
+    
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Twitter Floating Button (FAB) - Left Side -->
+    <button id="twitter-fab" class="twitter-fab twitter-fab-left" onclick="toggleTwitterSidebar()" title="X Crypto Tracker">
+        <img src="crypto-icons/X_icon.svg.png" alt="X" class="twitter-fab-image">
+    </button>
+
+    <!-- AI Trading Assistant Chat Widget -->
+    <!-- AI Chat Sidebar -->
+    <div id="chat-widget" class="chat-sidebar">
+        <div class="chat-content">
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <span class="chat-avatar">
+                        <img src="chat-agent.png" alt="AI Agent" class="chat-avatar-image">
+                    </span>
+                    <div>
+                        <div class="chat-title">
+                            Yunara
+                            <span id="chat-pro-badge" class="chat-pro-badge" style="display: none;" title="PRO Mode: Full analysis with Grok + Moralis + Gemini">
+                                <i class='bx bx-star'></i> PRO
+                            </span>
+                        </div>
+                        <div class="chat-status" id="chat-status">AI Trading Assistant | Powered by Moralis AI</div>
+                    </div>
+                </div>
+                <button class="chat-close" onclick="toggleChat()">
+                    <i class='bx bx-x'></i>
+                </button>
+            </div>
+            
+            <div class="chat-messages" id="chat-messages">
+                <div class="chat-message bot">
+                    <div class="chat-message-avatar">
+                        <i class='bx bx-bot'></i>
+                    </div>
+                    <div class="chat-message-content">
+                        <p><i class='bx bx-wink-smile'></i> Hi! I'm Yunara, your AI Trading Assistant powered by Moralis AI.</p>
+                        <p>I can help you with:</p>
+                        <ul>
+                            <li><i class='bx bx-search'></i> Token analysis & research</li>
+                            <li><i class='bx bx-bar-chart-alt-2'></i> Market data & prices</li>
+                            <li><i class='bx bx-bulb'></i> Trading strategies</li>
+                            <li><i class='bx bx-shield-quarter'></i> Risk assessment</li>
+                        </ul>
+                        <p>Ask me anything about crypto trading!</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chat-input-container">
+                <textarea 
+                    id="chat-input" 
+                    class="chat-input" 
+                    placeholder="Ask about tokens, trading, or market analysis..."
+                    rows="2"
+                    onkeydown="handleChatKeypress(event)"
+                ></textarea>
+                <button class="chat-send-btn" onclick="sendChatMessage()">
+                    <i class='bx bx-send'></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Chat FAB -->
+    <button id="chat-fab" class="chat-fab" onclick="toggleChat()" title="Yunara - AI Trading Assistant">
+        <img src="chat-agent.png" alt="AI Agent" class="chat-agent-image">
+    </button>
+
+    <!-- Twitter Sidebar -->
+    <div id="twitter-sidebar" class="twitter-sidebar">        
+        <div class="twitter-content">
+            <div class="twitter-header">
+                <h3>X Crypto Tracker</h3>
+                <button class="twitter-close" onclick="toggleTwitterSidebar()">&times;</button>
+            </div>
+            
+            <div class="twitter-controls">
+                <select id="twitter-feed-type" class="twitter-select" onchange="changeTwitterFeed()">
+                    <option value="community" selected>Crypto Community</option>
+                    <option value="user">User Timeline</option>
+                </select>
+                
+                <div style="display: flex; gap: 8px;">
+                    <input 
+                        type="text" 
+                        id="twitter-input" 
+                        class="twitter-input" 
+                        placeholder="Enter community ID or username..."
+                        onkeypress="if(event.key === 'Enter') addTwitterFeed()"
+                        style="flex: 1;"
+                    >
+                    
+                    <button class="twitter-add-btn" onclick="addTwitterFeed()" title="Add Feed">
+                        +
+                    </button>
+                </div>
+            </div>
+            
+            <div class="twitter-suggestions">
+                <button class="twitter-chip" onclick="addFeedQuick('community', '1935209194501919074', 'Crypto')">Crypto Community</button>
+                <button class="twitter-chip" onclick="addFeedQuick('user', 'elonmusk', '@elonmusk')">@elonmusk</button>
+                <button class="twitter-chip" onclick="addFeedQuick('user', 'VitalikButerin', '@VitalikButerin')">@VitalikButerin</button>
+                <button class="twitter-chip" onclick="addFeedQuick('user', 'cz_binance', '@cz_binance')">@cz_binance</button>
+            </div>
+            
+            <!-- Active Feeds List -->
+            <div id="active-feeds-container" class="active-feeds-container" style="display: none;">
+                <div class="active-feeds-header">
+                    <span>Active Feeds</span>
+                    <button class="twitter-clear-all-btn" onclick="clearAllFeeds()">Clear All</button>
+                </div>
+                <div id="active-feeds-list" class="active-feeds-list"></div>
+            </div>
+            
+            <div id="twitter-feed" class="twitter-feed">
+                <div class="twitter-empty">
+                    <div class="twitter-empty-icon">
+                        <img src="crypto-icons/X_icon.svg.png" alt="X" class="twitter-empty-logo">
+                    </div>
+                    <p>Add feeds to get started</p>
+                    <p class="twitter-hint">Add multiple communities or users to track</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>Powered by Moralis, Gemini AI, ChatGPT & x402 Protocol</p>
+            <p>Built by <strong>YunaraX402</strong> | Multi-Chain Launchpad Analyzer</p>
+            <p>© 2025 YunaraX402. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <!-- Chart.js for radar charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <!-- KOL Dashboard Modal -->
+    <div id="kol-dashboard-modal" class="modal">
+        <div class="modal-overlay" onclick="closeKOLDashboard()"></div>
+        <div class="modal-content kol-dashboard-content">
+            <div class="modal-header">
+                <h2><i class='bx bxs-user'></i> KOL Trading Activity</h2>
+                <button class="modal-close" onclick="closeKOLDashboard()">✕</button>
+            </div>
+            <div id="kol-dashboard-content" class="kol-dashboard-body">
+                <!-- Content will be loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- User Menu Dropdown -->
+    <div id="user-menu" class="user-menu" style="display: none;">
+        <div class="user-menu-item" onclick="openWatchlistDashboard(); closeUserMenu();">
+            <i class='bx bxs-star'></i>
+            <span>Watchlist</span>
+        </div>
+        <div class="user-menu-item" onclick="openQuestDashboard(); closeUserMenu();">
+            <i class='bx bx-task'></i>
+            <span>Quests</span>
+            <span id="free-credits-badge" class="free-credits-badge" style="display: none;"></span>
+        </div>
+        <div class="user-menu-item" onclick="openWalletDashboard(); closeUserMenu();">
+            <i class='bx bx-wallet'></i>
+            <span>Wallet Dashboard</span>
+        </div>
+        <div id="crossmint-wallet-menu-item" class="user-menu-item" onclick="createCrossmintWalletFromMenu(event); closeUserMenu();" style="display: none;">
+            <i class='bx bx-plus-circle'></i>
+            <span>Create Crossmint Wallet</span>
+        </div>
+        <div class="user-menu-divider"></div>
+        <div class="user-menu-item" onclick="copyWalletAddress();">
+            <i class='bx bx-copy'></i>
+            <span>Copy Wallet Address</span>
+        </div>
+        <div class="user-menu-divider"></div>
+        <div class="user-menu-item" onclick="logout(); closeUserMenu();">
+            <i class='bx bx-log-out'></i>
+            <span>Logout</span>
+        </div>
+    </div>
+
+    <!-- Wallet Dashboard Modal -->
+    <div id="wallet-dashboard-modal" class="modal">
+        <div class="modal-overlay" onclick="closeWalletDashboard()"></div>
+        <div class="modal-content wallet-dashboard-content">
+            <div class="modal-header">
+                <h2><i class='bx bx-wallet'></i> Your Wallet</h2>
+                <button class="modal-close" onclick="closeWalletDashboard()">✕</button>
+            </div>
+            <div id="wallet-dashboard-body" class="wallet-dashboard-body">
+                <!-- Content will be loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Watchlist Dashboard Modal -->
+    <div id="watchlist-dashboard-modal" class="modal">
+        <div class="modal-overlay" onclick="closeWatchlistDashboard()"></div>
+        <div class="modal-content watchlist-dashboard-content">
+            <div class="modal-header">
+                <h2><i class='bx bxs-star'></i> Watchlist</h2>
+                <button class="modal-close" onclick="closeWatchlistDashboard()">✕</button>
+            </div>
+            <div id="watchlist-dashboard-body" class="watchlist-dashboard-body">
+                <!-- Content will be loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Quest Dashboard Modal -->
+    <div id="quest-dashboard-modal" class="modal">
+        <div class="modal-overlay" onclick="closeQuestDashboard()"></div>
+        <div class="modal-content quest-dashboard-content">
+            <div class="modal-header">
+                <h2><i class='bx bx-task'></i> Quest Dashboard</h2>
+                <button class="modal-close" onclick="closeQuestDashboard()">✕</button>
+            </div>
+            <div id="quest-dashboard-body" class="quest-dashboard-body">
+                <!-- Content will be loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Analysis Dashboard Modal -->
+    <div id="ai-analysis-dashboard-modal" class="modal">
+        <div class="modal-overlay" onclick="closeAIAnalysisDashboard()"></div>
+        <div class="modal-content ai-analysis-dashboard-content">
+            <div class="modal-header">
+                <h2><i class='bx bx-brain'></i> AI Analysis History</h2>
+                <button class="modal-close" onclick="closeAIAnalysisDashboard()">✕</button>
+            </div>
+            <div id="ai-analysis-dashboard-body" class="ai-analysis-dashboard-body">
+                <!-- Content will be loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Token Calls Modal -->
+    <div id="ai-token-calls-modal" class="modal">
+        <div class="modal-overlay" onclick="closeAITokenCalls()"></div>
+        <div class="modal-content ai-token-calls-content">
+            <div class="modal-header">
+                <h2><i class='bx bx-brain'></i> AI Token Calls</h2>
+                <button class="modal-close" onclick="closeAITokenCalls()">✕</button>
+            </div>
+            <div id="ai-token-calls-body" class="ai-token-calls-body">
+                <div class="loading-spinner">
+                    <div class="spinner"></div>
+                    <p>Loading AI Token Calls...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js?v=20241108"></script>
+</body>
+</html>
+

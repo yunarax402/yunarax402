@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YunaraX402 Docs</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@latest/css/boxicons.min.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" href="logobrain.png">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="header-left">
+                    <nav class="header-nav">
+                        <a class="nav-link nav-link-primary" href="docs.html">Docs</a>
+                        <a class="nav-link" href="whitepaper.html">Whitepaper</a>
+                        <a class="nav-link nav-link-icon" href="https://twitter.com/YunaraX402" target="_blank" rel="noopener">
+                            <img src="crypto-icons/X_icon.svg.png" alt="YunaraX402 on X" class="nav-link-icon-img">
+                        </a>
+                        <button id="notifications-toggle" class="notifications-btn nav-alerts" type="button" aria-label="Open notifications">
+                            <i class='bx bx-bell'></i>
+                            <span>Alerts</span>
+                            <span class="notifications-badge" id="notifications-count">0</span>
+                        </button>
+                    </nav>
+                </div>
+                <div class="header-center">
+                    <a href="index.html" class="logo">
+                        <img src="logobrain.png" alt="YunaraX402" class="logo-image">
+                        <h1 class="logo-text">YunaraX402</h1>
+                    </a>
+                </div>
+                <div class="header-right">
+                    <div id="user-account" class="user-account" style="display: none;" onclick="toggleUserMenu(event)">
+                        <div class="user-avatar" id="user-avatar">
+                            <img id="user-avatar-img" src="" alt="User" style="display: none;">
+                            <span id="user-avatar-initial">U</span>
+                        </div>
+                        <div class="user-info">
+                            <div class="user-name" id="user-name">User</div>
+                            <div class="user-wallet" id="user-wallet">0x0000...0000</div>
+                        </div>
+                        <div class="user-balance" id="user-balance">$0.00 USDC</div>
+                        <button class="user-menu-btn" onclick="event.stopPropagation(); toggleUserMenu(event)">▼</button>
+                    </div>
+                    <button id="login-button" class="btn-login" type="button">
+                        <span>🔐 Login with Google</span>
+                    </button>
+                    <div class="status-indicator">
+                        <span class="status-dot status-active"></span>
+                        <span class="status-label">API</span>
+                    </div>
+                    <div class="status-indicator">
+                        <span class="status-dot status-active"></span>
+                        <span class="status-label">Server</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div id="notifications-backdrop" class="notifications-backdrop"></div>
+    <div id="notifications-panel" class="notifications-panel" aria-hidden="true">
+        <div class="notifications-panel-header">
+            <h3>AI Alerts</h3>
+            <button id="notifications-clear" type="button">Clear</button>
+        </div>
+        <div class="notifications-list" id="notifications-list">
+            <div class="notifications-empty" id="notifications-empty">New AI token alerts will appear here.</div>
+        </div>
+    </div>
+
+    <main class="whitepaper-main docs-main">
+        <section class="whitepaper-hero docs-hero">
+            <div class="container">
+                <div class="whitepaper-hero-content">
+                    <span class="whitepaper-badge">Documentation · Version 1.0 · Updated November 8, 2025</span>
+                    <h1 class="whitepaper-title">YunaraX402 Developer Documentation</h1>
+                    <p class="whitepaper-subtitle">Integrate the yunarax402 SDK, automate token analysis, and manage compute units through the Yunara platform.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="whitepaper-content">
+            <div class="container whitepaper-grid">
+                <aside class="whitepaper-toc">
+                    <h3>Contents</h3>
+                    <ol>
+                        <li><a href="#getting-started">Getting Started</a></li>
+                        <li><a href="#authentication">Authentication</a></li>
+                        <li><a href="#endpoints">API Endpoints</a></li>
+                        <li><a href="#sdks">SDK Usage</a></li>
+                        <li><a href="#webhooks">Automation & Webhooks</a></li>
+                        <li><a href="#cu">Compute Units</a></li>
+                        <li><a href="#support">Support & Resources</a></li>
+                    </ol>
+                </aside>
+
+                <article class="whitepaper-article docs-article">
+                    <section id="getting-started" class="whitepaper-section">
+                        <h2>Getting Started</h2>
+                        <p>Every Yunara account includes an on-chain wallet and access to the yunarax402 SDK. Follow these steps to begin:</p>
+                        <ol class="docs-steps">
+                            <li>Sign in with Google from the Yunara dashboard.</li>
+                            <li>Activate a subscription plan from <strong>Wallet → Subscription</strong> to credit Compute Units (CU).</li>
+                            <li>Generate an API key under <strong>Wallet → SDK API Keys</strong>. Copy and store it securely—the full key is shown once.</li>
+                            <li>Send authenticated requests to <code>https://yunarax402.com/api/sdk/analyze</code>.</li>
+                        </ol>
+                        <div class="docs-note">
+                            <i class='bx bx-info-circle'></i>
+                            <p>All SDK requests consume Compute Units. Each AI token analysis deducts 1 CU from your active plan.</p>
+                        </div>
+                    </section>
+
+                    <section id="authentication" class="whitepaper-section">
+                        <h2>Authentication</h2>
+                        <p>Authenticate by sending your API key in the <code>X-API-Key</code> header (preferred) or via bearer token.</p>
+                        <pre class="docs-code"><code class="language-bash">curl -X POST https://yunarax402.com/api/sdk/analyze \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: x402_XXXXXXXXXXXXXXXX" \
+  -d '{ "tokenData": { "name": "Example", "symbol": "EXMPL", "address": "0x...", "chain": "base" } }'</code></pre>
+                        <p>Unauthorized requests return <code>401 invalid_api_key</code>. If you exceed 60 requests per minute, the API responds with <code>429 rate_limited</code>.</p>
+                    </section>
+
+                    <section id="endpoints" class="whitepaper-section">
+                        <h2>API Endpoints</h2>
+                        <table class="whitepaper-table">
+                            <thead>
+                                <tr><th>Endpoint</th><th>Method</th><th>Description</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>/api/sdk/analyze</code></td>
+                                    <td>POST</td>
+                                    <td>Generates a full AI analysis for the provided token data. Response includes risk metrics, performance summary, and social insights.</td>
+                                </tr>
+                                <tr>
+                                    <td><code>/api/subscriptions/status</code></td>
+                                    <td>GET</td>
+                                    <td>Returns active plan details, remaining CU, renewal date, and recent usage history.</td>
+                                </tr>
+                                <tr>
+                                    <td><code>/api/subscriptions/purchase</code></td>
+                                    <td>POST</td>
+                                    <td>Initiates on-chain plan activation using x402 payments. Called automatically from the dashboard.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p>The <code>tokenData</code> payload accepts any metadata you already possess (symbol, launchpad, liquidity, etc.). Missing fields are auto-filled from Yunara’s data sources when available.</p>
+                        <pre class="docs-code"><code class="language-json">{
+  "tokenData": {
+    "name": "Example Token",
+    "symbol": "EXMPL",
+    "address": "0x1234...abcd",
+    "chain": "base",
+    "marketCap": 1250000,
+    "volume24h": 420000,
+    "liquidity": 165000
+  }
+}</code></pre>
+                    </section>
+
+                    <section id="sdks" class="whitepaper-section">
+                        <h2>SDK Usage</h2>
+                        <p>Use the SDK from any environment that can issue HTTPS requests. Examples for Node.js and Python:</p>
+                        <h3>Node.js</h3>
+                        <pre class="docs-code"><code class="language-javascript">import fetch from 'node-fetch';
+
+const API_KEY = process.env.yunarax402_API_KEY;
+const API_BASE = 'https://yunarax402.com';
+
+export async function analyzeToken(token) {
+  const res = await fetch(`${API_BASE}/api/sdk/analyze`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': API_KEY
+    },
+    body: JSON.stringify({ tokenData: token })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`Analysis failed (${res.status}): ${err.message || err.error}`);
+  }
+
+  return res.json();
+}</code></pre>
+
+                        <h3>Python</h3>
+                        <pre class="docs-code"><code class="language-python">import requests
+
+API_BASE = "https://yunarax402.com"
+API_KEY = "x402_..."
+
+payload = {"tokenData": {"name": "Example", "symbol": "EXMPL", "address": "0x...", "chain": "base"}}
+headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+
+response = requests.post(f"{API_BASE}/api/sdk/analyze", json=payload, headers=headers, timeout=30)
+response.raise_for_status()
+data = response.json()</code></pre>
+                    </section>
+
+                    <section id="webhooks" class="whitepaper-section">
+                        <h2>Automation & Webhooks</h2>
+                        <p>You can poll <code>/api/sdk/analyze</code> on a schedule or trigger it whenever a new token is detected in your pipeline. Recommended patterns:</p>
+                        <ul>
+                            <li><strong>Cron polling:</strong> Run analyses at fixed intervals and store JSON output in your analytics warehouse.</li>
+                            <li><strong>Event-driven:</strong> Combine with launchpad webhooks to automatically analyze new listings.</li>
+                            <li><strong>Discord/Slack alerts:</strong> Pipe significant AI insights directly to trading chats.</li>
+                        </ul>
+                        <p>Webhook delivery of AI analyses is on the roadmap. Contact support to join the beta.</p>
+                    </section>
+
+                    <section id="cu" class="whitepaper-section">
+                        <h2>Compute Units</h2>
+                        <p>Compute Units (CU) meter usage across the ecosystem:</p>
+                        <ul>
+                            <li>1 CU deducted per successful AI analysis.</li>
+                            <li>Failed or rate-limited calls do <em>not</em> consume CU.</li>
+                            <li>Subscription renewals reset balances monthly; unused CU do not roll over.</li>
+                            <li>Monitor remaining CU via <code>/api/subscriptions/status</code> or the Wallet dashboard.</li>
+                        </ul>
+                    </section>
+
+                    <section id="support" class="whitepaper-section">
+                        <h2>Support & Resources</h2>
+                        <p>Need help integrating the SDK or interpreting results?</p>
+                        <ul>
+                            <li>Email: <a href="mailto:support@yunara.ai">support@yunara.ai</a></li>
+                            <li>Discord: join <code>#yunara-developers</code></li>
+                            <li>Status page: <a href="https://status.yunarax402.com" target="_blank">status.yunarax402.com</a></li>
+                        </ul>
+                        <p>We welcome feature requests and feedback—let us know how to improve your workflows.</p>
+                    </section>
+                </article>
+            </div>
+        </section>
+    </main>
+
+    <footer class="whitepaper-footer">
+        <div class="container">
+            <p>© 2025 YunaraX402 · Docs portal launching soon</p>
+        </div>
+    </footer>
+    <script src="script.js" defer></script>
+</body>
+</html>
+
