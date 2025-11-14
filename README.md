@@ -1,12 +1,14 @@
 # YunaraX402 - Open Source Version
 
+![YunaraX402 Banner](https://raw.githubusercontent.com/yunarax402/yunarax402/main/public/logobrain.png)
+
 > **Multi-Chain Launchpad Analyzer with AI Trading Assistant**
 
 Search - Analyze - Measure - Invest
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 🌟 Features
+## Features
 
 - **Real-time Token Discovery**: Discover new tokens across Solana, Base, Ethereum, and BNB Chain
 - **AI-Powered Analysis**: Comprehensive token analysis using Gemini AI, OpenAI, and Grok
@@ -16,7 +18,7 @@ Search - Analyze - Measure - Invest
 - **Security Analysis**: RugCheck integration for Solana token security scoring
 - **AI Chat Assistant**: Interactive trading assistant powered by Moralis AI, Gemini, and Grok
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -60,7 +62,7 @@ Search - Analyze - Measure - Invest
    http://localhost:3000
    ```
 
-## 📋 Environment Variables
+## Environment Variables
 
 See `env.example` for all available configuration options.
 
@@ -78,7 +80,7 @@ See `env.example` for all available configuration options.
 - `RUGCHECK_API_KEY` - Solana token security analysis
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` - For user authentication
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 yunarax402/
@@ -94,7 +96,7 @@ yunarax402/
 └── README.md                   # This document
 ```
 
-## 🔧 API Endpoints
+## API Endpoints
 
 ### Token Analysis
 - `POST /api/analyze` - Analyze a token (requires authentication - optional)
@@ -109,7 +111,7 @@ yunarax402/
 - `GET /api/auth/logout` - Logout
 - `GET /api/user` - Get current user info
 
-## 🎯 Usage
+## Usage
 
 ### Analyze a Token
 
@@ -133,7 +135,7 @@ Use the chat widget to ask questions about:
 
 **Note:** In the open-source version, all users get full AI chat features (no PRO mode restrictions).
 
-## 🔐 Authentication
+## Authentication
 
 Authentication is optional. Without Google OAuth configured:
 - You can still browse and search tokens
@@ -145,7 +147,7 @@ To enable authentication:
 2. Add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to `.env`
 3. Set `GOOGLE_CALLBACK_URL` to your domain
 
-## 🌐 Deployment
+## Deployment
 
 ### Local Development
 ```bash
@@ -165,7 +167,7 @@ pm2 save
 pm2 startup
 ```
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
@@ -175,27 +177,27 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 📝 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Moralis](https://moralis.io) - Blockchain data API
 - [Google Gemini](https://deepmind.google/technologies/gemini/) - AI analysis
 - [OpenAI](https://openai.com) - AI fallback
 - [X.ai Grok](https://x.ai) - Twitter sentiment analysis
 
-## 📧 Support
+## Support
 
 - Website: [https://yunarax402.com](https://yunarax402.com)
 - GitHub: [https://github.com/yunarax402/yunarax402](https://github.com/yunarax402/yunarax402)
 - Twitter: [@YunaraX402](https://twitter.com/YunaraX402)
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 This software is provided for educational and research purposes. Always do your own research (DYOR) before making any investment decisions. Cryptocurrency trading involves substantial risk of loss.
 
 ---
 
-Made with ❤️ by the YunaraX402 team
+Made with love by the YunaraX402 team
