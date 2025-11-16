@@ -1,34 +1,4 @@
 // ===== Global State =====
-
-// Cache for Solana RPC URL (fetched from backend)
-let cachedSolanaRpcUrl = null;
-
-// Get Solana RPC URL (uses Helius if available, otherwise official Solana RPC)
-async function getSolanaRpcUrl() {
-    // Return cached value if available
-    if (cachedSolanaRpcUrl) {
-        return cachedSolanaRpcUrl;
-    }
-    
-    // Default: Official Solana RPC (no rate limits)
-    let rpcUrl = 'https://api.mainnet-beta.solana.com';
-    
-    try {
-        const rpcResponse = await fetch('/api/config/solana-rpc');
-        if (rpcResponse.ok) {
-            const rpcConfig = await rpcResponse.json();
-            if (rpcConfig.success && rpcConfig.rpcUrl) {
-                rpcUrl = rpcConfig.rpcUrl;
-                cachedSolanaRpcUrl = rpcUrl; // Cache it
-                console.log(`🔗 Using ${rpcConfig.provider} RPC for Solana operations`);
-            }
-        }
-    } catch (rpcError) {
-        console.warn('⚠️ Could not fetch RPC config, using default official Solana RPC:', rpcError.message);
-    }
-    
-    return rpcUrl;
-}
 let allTokens = [];
 let launchpadData = {};  // New: Store launchpad-grouped data
 let currentFilter = 'all';
@@ -47,16 +17,6 @@ let tokenFilterState = {
     ageMaxDays: null
 };
 
-// ===== Connected Wallet State =====
-let connectedWallet = {
-    provider: null, // Phantom provider (window.solana)
-    publicKey: null, // Solana PublicKey object
-    address: null, // Base58 address string
-    chainId: 'solana', // Always 'solana' for Phantom
-    network: 'Solana',
-    balance: null // SOL balance
-};
-
 let tokenFilterDebounceTimeout = null;
 
 const AI_TOKEN_DEFAULT_SUPPLY = 1_000_000_000;
@@ -65,7 +25,7 @@ let kolActivityLastFetched = 0;
 let kolActivityFetchController = null;
 let solanaDetailsAbortController = null;
 let currentSubscription = null;
-let subscriptionStatusLoaded = false;
+let subscriptionStatusLoaded = true; // Open-source: No subscription needed
 
 function getDexScreenerEmbedUrl(baseUrl) {
     if (!baseUrl) return '';
@@ -200,29 +160,19 @@ function hasSubscriptionAccess() {
 }
 
 function determineSubscriptionLockReason() {
-    if (isPaywallBypassed()) return 'bypass';
-    if (!currentUser) return 'login';
-    if (!subscriptionStatusLoaded) return 'subscription_required';
-    if (!currentSubscription || currentSubscription.status !== 'active') return 'subscription_required';
-    const remaining = Number(currentSubscription.cuBalance || 0);
-    if (!Number.isFinite(remaining) || remaining <= 0) {
-        return 'insufficient_cu';
-    }
+    // Open-source: No subscription locks - all features available
+    return 'bypass';
+}
     return 'subscription_required';
 }
 
 function handleAiPaywallPrimaryAction(reason = 'subscription_required') {
+    // Open-source: No payment required - features always available
     if (!currentUser) {
         loginWithGoogle();
         return;
     }
-    if (reason === 'insufficient_cu') {
-        showPaymentModal({
-            message: 'You are out of compute units. Add a plan or top up to keep receiving AI calls.'
-        });
-        return;
-    }
-    showPaymentModal();
+    // No payment modal needed
 }
 
 function handleAiPaywallSecondaryAction() {
@@ -404,8 +354,6 @@ async function loadSubscriptionStatus(force = false) {
         subscriptionStatusLoaded = true;
         updateNotificationAccess();
         updatePaywallState();
-        // Also update Pro AI Chat status when subscription status is loaded
-        checkChatProStatus();
     }
 
     return currentSubscription;
@@ -1272,40 +1220,12 @@ const USDC_ABI = [
     'function decimals() view returns (uint8)'
 ];
 // ===== Initialization =====
-// Check if SPL Token library is loaded
-function checkSPLTokenLibrary() {
-    // Wait a bit for scripts to load
-    setTimeout(() => {
-        const checks = [
-            window.splToken,
-            window.SolanaSPLToken,
-            window['@solana/spl-token'],
-            null // Only check window properties, not global variables
-        ].filter(Boolean);
-        
-        if (checks.length === 0) {
-            console.warn('⚠️ SPL Token library not found. Checking available window properties...');
-            const relevantKeys = Object.keys(window).filter(k => 
-                k.toLowerCase().includes('spl') || 
-                k.toLowerCase().includes('token') ||
-                k.toLowerCase().includes('solana')
-            );
-            console.log('Available relevant window properties:', relevantKeys);
-        } else {
-            console.log('✅ SPL Token library found:', checks[0]);
-        }
-    }, 1000);
-}
-
 document.addEventListener('DOMContentLoaded', () => {
-    // Check if SPL Token library loaded
-    checkSPLTokenLibrary();
     checkApiHealth();
     checkAuthStatus(); // Check if user is already logged in
     // Tokens load on-demand when user opens MEMESCOPE
     // setupAutoRefresh(); // Removed to reduce API calls
     initializeNotificationCenter();
-    initializeConnectedWallet(); // Initialize wallet connection
     
     // Initialize orbital animation
     initOrbitalAnimation();
@@ -1411,23 +1331,16 @@ async function checkAuthStatus() {
     }
 }
 
-// Get main wallet chain from localStorage (defaults to 'solana-crossmint')
+// Get main wallet chain from localStorage (defaults to 'base')
 function getMainWalletChain() {
-    if (!currentUser) return 'solana-crossmint';
+    if (!currentUser) return 'base';
     const stored = localStorage.getItem(`mainWallet_${currentUser.id}`);
-    // If stored chain is not allowed, default to solana-crossmint
-    const allowedChains = ['solana-crossmint'];
-    return (stored && allowedChains.includes(stored)) ? stored : 'solana-crossmint';
+    return stored || 'base';
 }
 
-// Set main wallet chain (only allow solana-crossmint)
+// Set main wallet chain
 async function setMainWalletChain(chain) {
     if (!currentUser) return;
-    // Only allow solana-crossmint as main wallet
-    if (chain !== 'solana-crossmint') {
-        console.warn('Only solana-crossmint can be set as main wallet');
-        return;
-    }
     localStorage.setItem(`mainWallet_${currentUser.id}`, chain);
     // Reload wallet with new chain and wait for it to complete
     await loadUserWallet();
@@ -1435,29 +1348,16 @@ async function setMainWalletChain(chain) {
     updateUserUI();
 }
 
-// Load user wallet info (Crossmint removed - only Phantom wallets)
+// Load user wallet info (loads the selected main wallet)
 async function loadUserWallet() {
     if (!currentUser) {
         userWallet = null;
         return;
     }
     
-    // Crossmint wallets removed - no embedded wallets to load
-    // Only Phantom wallets are supported (handled separately)
-    userWallet = null;
-    updateUserUI();
-    return;
-    
-    // OLD CODE (disabled):
     try {
         // Load the selected main wallet chain
         const mainChain = getMainWalletChain();
-        if (!mainChain) {
-            // No main wallet chain - Crossmint removed
-            userWallet = null;
-            updateUserUI();
-            return;
-        }
         const response = await fetch(`${API_BASE_URL}/api/wallet?chain=${mainChain}`, {
             credentials: 'include'
         });
@@ -1566,10 +1466,48 @@ async function loadUserWallet() {
         // Don't show toast here - it's called on page load and might be annoying
     }
     
-    // Crossmint wallets removed - only Phantom wallets are supported
+    // Check Crossmint wallet status after loading user wallet
+    if (currentUser) {
+        checkCrossmintWalletStatus();
+    }
 }
 
-// Crossmint wallet functions removed - only Phantom wallets are supported
+// Check if Crossmint wallet exists and show/hide menu item
+async function checkCrossmintWalletStatus() {
+    try {
+        const menuItem = document.getElementById('crossmint-wallet-menu-item');
+        if (!menuItem) return;
+        
+        // Check Crossmint status from API
+        const statusResponse = await fetch(`${API_BASE_URL}/api/wallet/crossmint-status`, { credentials: 'include' });
+        if (statusResponse.ok) {
+            const status = await statusResponse.json();
+            // Show menu item only if Crossmint is configured AND wallet doesn't exist
+            if (status.shouldShowButton) {
+                menuItem.style.display = 'flex';
+            } else {
+                menuItem.style.display = 'none';
+            }
+        } else {
+            // Hide on error
+            menuItem.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error checking Crossmint wallet status:', error);
+        // Hide menu item on error
+        const menuItem = document.getElementById('crossmint-wallet-menu-item');
+        if (menuItem) menuItem.style.display = 'none';
+    }
+}
+
+// Create Crossmint wallet from menu
+async function createCrossmintWalletFromMenu(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    await createCrossmintWallet(event);
+}
 
 // Update user UI in header
 function updateUserUI() {
@@ -1596,11 +1534,7 @@ function updateUserUI() {
         // Update name and wallet
         document.getElementById('user-name').textContent = currentUser.name;
         const walletElement = document.getElementById('user-wallet');
-        // Crossmint wallets removed - show Phantom wallet if connected
-        if (connectedWallet && connectedWallet.address) {
-            const shortAddress = `${connectedWallet.address.slice(0, 6)}...${connectedWallet.address.slice(-4)}`;
-            walletElement.textContent = shortAddress;
-        } else if (userWallet && userWallet.address) {
+        if (userWallet && userWallet.address) {
             const shortAddress = `${userWallet.address.slice(0, 6)}...${userWallet.address.slice(-4)}`;
             walletElement.textContent = shortAddress;
         } else {
@@ -1750,32 +1684,77 @@ function closeUserMenu() {
     document.removeEventListener('click', closeUserMenuOnClickOutside, true);
 }
 
-// Copy wallet address (Crossmint removed - use Phantom wallet if connected)
+// Copy wallet address (copies the main wallet)
 async function copyWalletAddress() {
-    // Crossmint wallets removed - use Phantom wallet if connected
-    if (connectedWallet && connectedWallet.address) {
-        await copyToClipboard(connectedWallet.address);
-        showToast('Phantom wallet address copied!', 'success');
-        closeUserMenu();
-        return;
+    // If wallet not loaded, try to load it first
+    if (!userWallet || !userWallet.address) {
+        // Try to load the wallet
+        await loadUserWallet();
+        
+        // Check again after loading
+        if (!userWallet || !userWallet.address) {
+            // If still not loaded, try fetching directly from the selected chain
+            const mainChain = getMainWalletChain();
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/wallet?chain=${mainChain}`, {
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const walletData = await response.json();
+                    if (walletData && walletData.address) {
+                        userWallet = walletData;
+                        userWallet.chain = mainChain;
+                        updateUserUI();
+                    } else {
+                        showToast('Wallet not available', 'error');
+                        closeUserMenu();
+                        return;
+                    }
+                } else {
+                    showToast('Failed to load wallet', 'error');
+                    closeUserMenu();
+                    return;
+                }
+            } catch (error) {
+                console.error('Failed to fetch wallet:', error);
+                showToast('Failed to load wallet', 'error');
+                closeUserMenu();
+                return;
+            }
+        }
     }
     
-    // No wallet available
-    showToast('Please connect your Phantom wallet first', 'warning');
-    closeUserMenu();
+    // Now copy the address
+    if (userWallet && userWallet.address) {
+        await copyToClipboard(userWallet.address);
+        showToast('Wallet address copied!', 'success');
+        closeUserMenu();
+    } else {
+        showToast('Wallet address not available', 'error');
+    }
 }
 
-// Auto-refresh balance (Crossmint removed - refresh Phantom wallet if connected)
+// Auto-refresh balance for main wallet
 async function autoRefreshBalance() {
-    // Crossmint wallets removed - refresh Phantom wallet if connected
-    if (connectedWallet && connectedWallet.address && connectedWallet.publicKey) {
-        try {
-            const balance = await getConnectedWalletUSDCBalance();
-            connectedWallet.balance = balance;
-            updateConnectedWalletUI();
-        } catch (error) {
-            console.error('Auto-refresh Phantom balance failed:', error);
+    if (!currentUser || !userWallet) return;
+    
+    try {
+        const mainChain = getMainWalletChain();
+        const response = await fetch(`${API_BASE_URL}/api/wallet/refresh?chain=${mainChain}`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (userWallet) {
+                userWallet.balance = data.balance;
+                updateUserBalance();
+            }
         }
+    } catch (error) {
+        console.error('Auto-refresh balance failed:', error);
     }
 }
 // Store the refresh interval ID to prevent multiple intervals
@@ -1855,7 +1834,11 @@ async function openWalletDashboard() {
         
         // Debug: Log wallets to see what we're getting
         console.log('📦 Wallets received from API:', wallets);
-        // Crossmint wallets removed - only showing Phantom wallets
+        console.log('🔍 Crossmint wallet check:', {
+            exists: !!wallets['solana-crossmint'],
+            hasAddress: !!(wallets['solana-crossmint'] && wallets['solana-crossmint'].address),
+            address: wallets['solana-crossmint']?.address || 'none'
+        });
         
         let subscriptionStatus = null;
         if (subscriptionResponse.ok) {
@@ -1873,23 +1856,14 @@ async function openWalletDashboard() {
             console.warn('Subscription plans unavailable:', plansResponse.status);
         }
         
-        // Chain display info with actual logos (Crossmint removed)
+        // Chain display info with actual logos
         const chainInfo = {
-            'phantom': { name: 'Phantom', logo: 'solana-logo.png', color: '#AB9FF2' }
+            base: { name: 'Base', logo: 'base-logo.png', color: '#0052FF' },
+            'solana-crossmint': { name: 'Solana Crossmint', logo: 'solana-logo.png', color: '#14F195' },
+            ethereum: { name: 'Ethereum', logo: 'eth_light_3.png', color: '#627EEA' },
+            bnb: { name: 'BNB Chain', logo: 'bnb-logo.png', color: '#F3BA2F' },
+            solana: { name: 'Solana', logo: 'solana-logo.png', color: '#9945FF' }
         };
-        
-        // Filter wallets: Remove Crossmint wallets, only show Phantom
-        // Exclude solana-crossmint since it doesn't work - users should use Phantom instead
-        const filteredWallets = {};
-        
-        // Add Phantom wallet if connected
-        if (connectedWallet && connectedWallet.address && connectedWallet.publicKey) {
-            filteredWallets['phantom'] = {
-                address: connectedWallet.address,
-                balance: (await getConnectedWalletUSDCBalance()).toFixed(2),
-                isPhantom: true
-            };
-        }
         
         body.innerHTML = `
             <div class="wallet-info-card">
@@ -1904,22 +1878,15 @@ async function openWalletDashboard() {
                 </div>
                 
                 <div class="wallet-chains-section">
-                    <h4 style="margin-bottom: 16px; color: var(--text-primary);">Your Wallets</h4>
+                    <h4 style="margin-bottom: 16px; color: var(--text-primary);">Your Multi-Chain Wallets</h4>
                     <div class="wallet-chains-grid">
-                        ${Object.keys(filteredWallets).map(chain => {
-                            const wallet = filteredWallets[chain];
-                            // Only Phantom wallets are shown
-                            let info;
-                            if (chain === 'phantom') {
-                                info = { name: 'Phantom', logo: 'solana-logo.png', color: '#AB9FF2' };
-                            } else {
-                                info = chainInfo[chain] || { name: chain, logo: 'solana-logo.png', color: '#14F195' };
-                            }
+                        ${Object.keys(wallets).filter(chain => wallets[chain] && wallets[chain].address).map(chain => {
+                            const wallet = wallets[chain];
+                            const info = chainInfo[chain] || { name: chain, logo: 'solana-logo.png', color: '#14F195' };
                             const balance = parseFloat(wallet.balance || 0).toFixed(2);
                             const address = wallet.address || 'Not available';
                             const mainChain = getMainWalletChain();
-                            // Phantom wallets don't have main wallet option
-                            const isMain = false;
+                            const isMain = chain === mainChain;
                             
                             return `
                                 <div class="wallet-chain-card ${isMain ? 'wallet-chain-main' : ''}" data-chain="${chain}">
@@ -1942,11 +1909,7 @@ async function openWalletDashboard() {
                                             </button>
                                         </div>
                                     </div>
-                                    ${chain === 'phantom' ? `
-                                        <div class="phantom-wallet-indicator" style="padding: 8px; background: rgba(171, 159, 242, 0.1); border-radius: 6px; margin-top: 8px;">
-                                            <i class='bx bx-wallet' style="color: #AB9FF2;"></i> Connected Wallet
-                                        </div>
-                                    ` : !isMain ? `
+                                    ${!isMain ? `
                                         <button class="btn-set-main-wallet" onclick="(async () => { await setMainWalletChain('${chain}'); closeWalletDashboard(); showToast('${info.name} set as main wallet', 'success'); })()" title="Set as Main Wallet">
                                             <i class='bx bx-star'></i> Set as Main
                                         </button>
@@ -1955,40 +1918,51 @@ async function openWalletDashboard() {
                                             <i class='bx bx-check-circle'></i> Main Wallet
                                         </div>
                                     `}
-                                    ${chain === 'phantom' ? `
-                                        <button class="btn-refresh-chain" onclick="refreshConnectedWalletBalance()" title="Refresh Balance">
-                                            <i class='bx bx-refresh'></i> Refresh
-                                        </button>
-                                    ` : `
-                                        <button class="btn-refresh-chain" onclick="refreshChainBalance('${chain}')" title="Refresh Balance">
-                                            <i class='bx bx-refresh'></i> Refresh
-                                        </button>
-                                    `}
+                                    <button class="btn-refresh-chain" onclick="refreshChainBalance('${chain}')" title="Refresh Balance">
+                                        <i class='bx bx-refresh'></i> Refresh
+                                    </button>
                                 </div>
                             `;
                         }).join('')}
                     </div>
+                    ${(!wallets['solana-crossmint'] || !wallets['solana-crossmint'].address) ? `
+                    <div style="margin-top: 20px; padding: 16px; background: var(--card-bg); border-radius: 8px; border: 1px dashed var(--border-color);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                            <div>
+                                <h5 style="margin: 0 0 8px 0; color: var(--text-primary);">Solana Crossmint Wallet</h5>
+                                <p style="margin: 0; color: var(--text-secondary); font-size: 14px;">Create an embedded Solana wallet powered by Crossmint</p>
+                            </div>
+                            <button class="btn-primary" onclick="createCrossmintWallet(event)" style="white-space: nowrap;">
+                                <i class='bx bx-plus'></i> Create Crossmint Wallet
+                            </button>
+                        </div>
+                    </div>
+                    ` : ''}
                 </div>
                 
                 ${renderSubscriptionSection(subscriptionStatus, subscriptionPlans)}
                 
-                ${Object.keys(filteredWallets).length === 0 ? `
-                <div style="margin-top: 20px; padding: 20px; background: var(--card-bg); border-radius: 8px; border: 1px solid var(--border-color); text-align: center;">
-                    <h5 style="margin: 0 0 12px 0; color: var(--text-primary);">No Wallets Connected</h5>
-                    <p style="margin: 0 0 16px 0; color: var(--text-secondary); font-size: 14px;">Connect your Phantom wallet to make payments and access all features.</p>
-                    <button class="btn-primary" onclick="connectWallet(); closeWalletDashboard();" style="white-space: nowrap;">
-                        <i class='bx bx-wallet'></i> Connect Phantom Wallet
-                    </button>
+                <div class="wallet-deposit-section">
+                    <h4><i class='bx bx-dollar'></i> Deposit USDC</h4>
+                    <p class="wallet-deposit-info">Send USDC to your wallet addresses above to fund your AI analysis subscription and compute units. Each chain has its own wallet.</p>
+                    <div class="wallet-deposit-info-box">
+                        <p><strong>Supported Networks:</strong> Base, Ethereum, BNB Chain, Solana</p>
+                        <p><strong>Token:</strong> USDC (chain-specific)</p>
+                        <p><strong>Recommended:</strong> Deposit enough USDC to cover your preferred monthly plan</p>
+                        <p style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
+                            <strong>Note:</strong> Payments can be processed from any supported network (Base, Ethereum, BNB Chain, or Solana).
+                        </p>
+                    </div>
                 </div>
-                ` : ''}
                 
                 <div class="wallet-usage-info">
                     <h4><i class='bx bx-bulb'></i> How It Works</h4>
                     <ul>
-                        <li>Connect your Phantom wallet to make payments</li>
+                        <li>Your YunaraX402 account includes wallets for Base, Ethereum, BNB, and Solana</li>
+                        <li>Deposit USDC into any of these wallets to fund your subscription</li>
                         <li>AI analyses consume 1 Compute Unit (CU) from your active plan</li>
                         <li>Switch or top-up plans anytime—remaining CU carries until the next renewal</li>
-                        <li>Payments are processed directly from your Phantom wallet</li>
+                        <li>No external wallet connection required; payments run through x402 automatically</li>
                     </ul>
                 </div>
             </div>
@@ -2004,19 +1978,65 @@ async function openWalletDashboard() {
     }
 }
 
-// Crossmint wallet creation removed - only Phantom wallets are supported
+// Refresh balance for a specific chain
+async function createCrossmintWallet(event) {
+    let button = null;
+    try {
+        // Get button element safely
+        if (event && event.target) {
+            button = event.target.closest('button');
+        }
+        
+        // If no button from event, try to find it by ID
+        if (!button) {
+            button = document.getElementById('crossmint-wallet-menu-item');
+        }
+        
+        if (button) {
+            button.disabled = true;
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<span class="button-spinner"></span> Creating...';
+            
+            // Store original HTML for error recovery
+            button.dataset.originalHTML = originalHTML;
+        }
+        
+        const response = await fetch(`${API_BASE_URL}/api/wallet/create-crossmint`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || errorData.error || 'Failed to create Crossmint wallet');
+        }
+        
+        const data = await response.json();
+        showToast('Crossmint wallet created successfully!', 'success');
+        
+        // Hide the menu item since wallet now exists
+        const menuItem = document.getElementById('crossmint-wallet-menu-item');
+        if (menuItem) menuItem.style.display = 'none';
+        
+        // Refresh wallet dashboard to show new wallet
+        await openWalletDashboard();
+    } catch (error) {
+        console.error('Error creating Crossmint wallet:', error);
+        showToast(error.message || 'Failed to create Crossmint wallet', 'error');
+        
+        // Restore button state on error
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = button.dataset.originalHTML || '<i class=\'bx bx-plus-circle\'></i> <span>Create Crossmint Wallet</span>';
+        }
+    }
+}
 
 async function refreshChainBalance(chain) {
     try {
-        // Crossmint wallets removed - this function is no longer used
-        console.warn('Embedded wallets removed - only Phantom wallets are supported');
-        return;
-        // Only allow refreshing solana-crossmint (removed)
-        if (chain !== 'solana-crossmint') {
-            console.warn('Only solana-crossmint can be refreshed');
-            return;
-        }
-        
         const response = await fetch(`${API_BASE_URL}/api/wallet/refresh?chain=${chain}`, {
             method: 'POST',
             credentials: 'include'
@@ -2024,7 +2044,7 @@ async function refreshChainBalance(chain) {
         
         if (response.ok) {
             const data = await response.json();
-            showToast('Solana balance refreshed!', 'success');
+            showToast(`${chain} balance refreshed!`, 'success');
             // Reload wallet dashboard to show updated balance
             openWalletDashboard();
         } else {
@@ -2032,7 +2052,7 @@ async function refreshChainBalance(chain) {
         }
     } catch (error) {
         console.error('Failed to refresh chain balance:', error);
-        showToast('Failed to refresh balance', 'error');
+        showToast(`Failed to refresh ${chain} balance`, 'error');
     }
 }
 
@@ -2048,1031 +2068,9 @@ function closeWalletDashboard() {
     document.getElementById('wallet-dashboard-modal').classList.remove('active');
 }
 
-// ===== Connected Wallet Functions =====
-
-// Connect MetaMask or other EVM wallet
-// Connect wallet (Phantom/Solana)
-async function connectWallet() {
-    try {
-        // Use window.phantom?.solana for better compatibility
-        const provider = window.phantom?.solana || window.solana;
-        
-        if (!provider || !provider.isPhantom) {
-            showToast('Phantom wallet not found. Please install Phantom.', 'error');
-            window.open('https://phantom.app/', '_blank');
-            return;
-        }
-
-        showToast('Connecting Phantom wallet...', 'warning');
-        
-        // Request account access
-        const resp = await provider.connect();
-        
-        if (!resp || !resp.publicKey) {
-            throw new Error('No account found');
-        }
-
-        const publicKey = resp.publicKey;
-        const address = publicKey.toBase58();
-
-        // Get SOL balance - use RPC from backend (Helius if available, otherwise official Solana RPC)
-        const { Connection } = window.solanaWeb3 || solanaWeb3;
-        const rpcUrl = await getSolanaRpcUrl();
-        const connection = new Connection(rpcUrl, 'confirmed');
-        const balance = await connection.getBalance(publicKey);
-        const balanceFormatted = balance / 1_000_000_000; // LAMPORTS_PER_SOL
-
-        // Store connected wallet state
-        connectedWallet = {
-            provider: provider,
-            publicKey: publicKey,
-            address: address,
-            chainId: 'solana',
-            network: 'Solana',
-            balance: balanceFormatted
-        };
-
-        // Update UI
-        updateConnectedWalletUI();
-        
-        // Listen for account changes
-        provider.on('accountChanged', handleAccountsChanged);
-        provider.on('disconnect', handleDisconnect);
-
-        showToast('Phantom wallet connected successfully!', 'success');
-        
-        // Open connected wallet dashboard
-        await openConnectedWalletDashboard();
-    } catch (error) {
-        console.error('Error connecting wallet:', error);
-        if (error.code === 4001) {
-            showToast('Wallet connection rejected', 'error');
-        } else {
-            showToast(`Failed to connect wallet: ${error.message}`, 'error');
-        }
-    }
-}
-
-// Handle account changes (Phantom)
-function handleAccountsChanged(publicKey) {
-    if (publicKey) {
-        // Account changed, reconnect
-        connectWallet();
-    } else {
-        // User disconnected wallet
-        disconnectWallet();
-    }
-}
-
-// Handle disconnect (Phantom)
-function handleDisconnect() {
-    disconnectWallet();
-}
-
-// Disconnect wallet
-async function disconnectWallet() {
-    // Disconnect from Phantom
-    if (connectedWallet.provider && connectedWallet.provider.isConnected) {
-        try {
-            await connectedWallet.provider.disconnect();
-        } catch (e) {
-            console.warn('Error disconnecting from Phantom:', e);
-        }
-    }
-
-    connectedWallet = {
-        provider: null,
-        publicKey: null,
-        address: null,
-        chainId: 'solana',
-        network: 'Solana',
-        balance: null
-    };
-
-    // Remove event listeners
-    if (window.solana) {
-        window.solana.removeListener('accountChanged', handleAccountsChanged);
-        window.solana.removeListener('disconnect', handleDisconnect);
-    }
-
-    updateConnectedWalletUI();
-    showToast('Wallet disconnected', 'success');
-}
-
-// Update connected wallet UI
-function updateConnectedWalletUI() {
-    const connectBtn = document.getElementById('connect-wallet-button');
-    
-    if (connectedWallet.address) {
-        // Wallet connected - show address
-        const shortAddress = `${connectedWallet.address.slice(0, 4)}...${connectedWallet.address.slice(-4)}`;
-        connectBtn.innerHTML = `<i class='bx bx-wallet'></i><span>${shortAddress}</span>`;
-        connectBtn.onclick = () => openConnectedWalletDashboard();
-        connectBtn.classList.add('connected');
-    } else {
-        // No wallet connected
-        connectBtn.innerHTML = `<i class='bx bx-wallet'></i><span>Connect Phantom</span>`;
-        connectBtn.onclick = () => connectWallet();
-        connectBtn.classList.remove('connected');
-    }
-    
-    // Show connect button (always visible)
-    connectBtn.style.display = 'block';
-}
-
-// Open connected wallet dashboard (separate from regular wallet dashboard)
-async function openConnectedWalletDashboard() {
-    const modal = document.getElementById('connected-wallet-dashboard-modal');
-    const body = document.getElementById('connected-wallet-dashboard-body');
-    
-    if (!connectedWallet.address) {
-        showToast('Please connect a wallet first', 'warning');
-        return;
-    }
-    
-    modal.classList.add('active');
-    
-    body.innerHTML = `
-        <div class="wallet-loading">
-            <div class="spinner"></div>
-            <p>Loading wallet information...</p>
-        </div>
-    `;
-    
-    try {
-        // Get network info
-        const networkName = getNetworkName(connectedWallet.chainId);
-        const networkLogo = getNetworkLogo(connectedWallet.chainId);
-        
-        // Get USDC balance
-        const usdcBalance = await getConnectedWalletUSDCBalance();
-        
-        // Get subscription plans
-        const plansResponse = await fetch(`${API_BASE_URL}/api/subscriptions/plans`, { credentials: 'include' });
-        const plansPayload = plansResponse.ok ? await plansResponse.json() : { plans: [] };
-        const subscriptionPlans = plansPayload.plans || [];
-        
-        body.innerHTML = `
-            <div class="wallet-info-card">
-                <div class="wallet-header">
-                    <div class="wallet-avatar">
-                        <i class='bx bx-link-external' style="font-size: 32px;"></i>
-                    </div>
-                    <div class="wallet-user-info">
-                        <h3>Connected Wallet</h3>
-                        <p class="wallet-email">${connectedWallet.address}</p>
-                    </div>
-                    <button class="btn-secondary" onclick="disconnectWallet(); closeConnectedWalletDashboard();" style="margin-left: auto;">
-                        <i class='bx bx-unlink'></i> Disconnect
-                    </button>
-                </div>
-                
-                <div class="wallet-chains-section">
-                    <h4 style="margin-bottom: 16px; color: var(--text-primary);">Connected Wallet</h4>
-                    <div class="wallet-chains-grid">
-                        <div class="wallet-chain-card wallet-chain-main">
-                            <div class="wallet-chain-header">
-                                <div class="wallet-chain-icon">
-                                    <img src="${networkLogo}" alt="${networkName}" class="wallet-chain-icon-img">
-                                </div>
-                                <div class="wallet-chain-name">${networkName}</div>
-                            </div>
-                            <div class="wallet-chain-balance">
-                                <div class="wallet-chain-balance-label">USDC Balance</div>
-                                <div class="wallet-chain-balance-value">$${usdcBalance.toFixed(2)}</div>
-                            </div>
-                            <div class="wallet-chain-address">
-                                <div class="wallet-chain-address-label">Address</div>
-                                <div class="wallet-chain-address-value">
-                                    <code>${connectedWallet.address.substring(0, 10)}...${connectedWallet.address.substring(connectedWallet.address.length - 8)}</code>
-                                    <button class="btn-copy-address-small" onclick="copyToClipboard('${connectedWallet.address}'); showToast('Address copied!', 'success')" title="Copy Address">
-                                        <i class='bx bx-copy'></i>
-                                    </button>
-                                </div>
-                            </div>
-                            <button class="btn-refresh-chain" onclick="refreshConnectedWalletBalance()" title="Refresh Balance">
-                                <i class='bx bx-refresh'></i> Refresh
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                
-                ${renderSubscriptionSectionForConnectedWallet(subscriptionPlans)}
-                
-                <div class="wallet-deposit-section">
-                    <h4><i class='bx bx-dollar'></i> Pay with Connected Wallet</h4>
-                    <p class="wallet-deposit-info">Use your connected wallet to pay for subscription plans. Payments are processed directly from your wallet via MetaMask.</p>
-                    <div class="wallet-deposit-info-box">
-                        <p><strong>Network:</strong> ${networkName}</p>
-                        <p><strong>Token:</strong> USDC</p>
-                        <p><strong>Payment Method:</strong> Direct wallet transaction</p>
-                    </div>
-                </div>
-            </div>
-        `;
-    } catch (error) {
-        body.innerHTML = `
-            <div class="wallet-error">
-                <p>❌ Failed to load wallet information</p>
-                <p>${error.message}</p>
-                <button class="btn-primary" onclick="openConnectedWalletDashboard()">Retry</button>
-            </div>
-        `;
-    }
-}
-
-// Get network name from chain ID
-function getNetworkName(chainId) {
-    if (chainId === 'solana') return 'Solana';
-    const networks = {
-        1: 'Ethereum',
-        8453: 'Base',
-        56: 'BNB Chain',
-        137: 'Polygon',
-        42161: 'Arbitrum',
-        10: 'Optimism'
-    };
-    return networks[chainId] || `Chain ${chainId}`;
-}
-
-// Get network logo from chain ID
-function getNetworkLogo(chainId) {
-    if (chainId === 'solana') return 'solana-logo.png';
-    const logos = {
-        1: 'eth_light_3.png',
-        8453: 'base-logo.png',
-        56: 'bnb-logo.png',
-        137: 'polygon-logo.png',
-        42161: 'arbitrum-logo.png',
-        10: 'optimism-logo.png'
-    };
-    return logos[chainId] || 'eth_light_3.png';
-}
-
-// Get USDC balance for connected wallet (Solana)
-async function getConnectedWalletUSDCBalance() {
-    if (!connectedWallet.provider || !connectedWallet.address || !connectedWallet.publicKey) {
-        return 0;
-    }
-
-    try {
-        // Use global solanaWeb3 from CDN
-        const { Connection, PublicKey } = window.solanaWeb3 || solanaWeb3;
-        // Use RPC from backend (Helius if available, otherwise official Solana RPC)
-        const rpcUrl = await getSolanaRpcUrl();
-        const connection = new Connection(rpcUrl, 'confirmed');
-        // Solana USDC mint address (Production Mainnet) - DO NOT CHANGE
-        const usdcMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'); // Solana USDC
-        
-        // Get associated token account
-        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-            connectedWallet.publicKey,
-            { mint: usdcMint }
-        );
-        
-        if (tokenAccounts.value.length === 0) {
-            return 0;
-        }
-
-        // Get balance from first token account
-        const tokenAccount = tokenAccounts.value[0];
-        const balance = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
-        
-        return parseFloat(balance || 0);
-    } catch (error) {
-        console.error('Error fetching USDC balance:', error);
-        return 0;
-    }
-}
-
-// Refresh connected wallet balance and reload main wallet dashboard
-async function refreshConnectedWalletBalance() {
-    if (!connectedWallet.address) {
-        showToast('No wallet connected', 'error');
-        return;
-    }
-
-    try {
-        showToast('Refreshing balance...', 'warning');
-        const balance = await getConnectedWalletUSDCBalance();
-        connectedWallet.balance = balance;
-        // Reload main wallet dashboard to show updated Phantom balance
-        if (document.getElementById('wallet-dashboard-modal').classList.contains('active')) {
-            await openWalletDashboard();
-        }
-        showToast('Balance refreshed!', 'success');
-    } catch (error) {
-        console.error('Error refreshing balance:', error);
-        showToast('Failed to refresh balance', 'error');
-    }
-}
-
-// Render subscription section for connected wallet (without existing wallets)
-function renderSubscriptionSectionForConnectedWallet(plans = []) {
-    const planCards = (Array.isArray(plans) ? plans : []).map(plan => {
-        const planPrice = Number(plan.monthlyPriceUsd || 0);
-        const planCu = Number(plan.monthlyCu || 0);
-        const safeDescription = (plan.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        
-        return `
-            <div class="subscription-plan-card">
-                <div class="plan-heading">
-                    <h5>${plan.name}</h5>
-                    <div class="plan-price">$${planPrice.toFixed(2)} <span>per package</span></div>
-                </div>
-                <div class="plan-cu">${planCu} Compute Units</div>
-                <p class="plan-description">${safeDescription}</p>
-                <button class="btn-subscribe-plan" onclick="purchaseSubscriptionPlanWithConnectedWallet('${plan.id}', this)">
-                    <i class='bx bx-rocket'></i> Purchase with Wallet
-                </button>
-            </div>
-        `;
-    }).join('');
-    
-    return `
-        <div class="wallet-subscription-section">
-            <div class="subscription-summary-card">
-                <div class="subscription-summary-header">
-                    <h4><i class='bx bx-bolt-circle'></i> AI Analysis Subscription</h4>
-                </div>
-                <div class="subscription-summary-note">
-                    Choose a plan below to unlock AI analyses. Each analysis costs 1 Compute Unit (CU).
-                    Payments are processed directly from your connected wallet.
-                </div>
-            </div>
-            
-            <div class="subscription-plan-grid">
-                ${planCards}
-            </div>
-        </div>
-    `;
-}
-
-// Purchase subscription plan with connected wallet
-async function purchaseSubscriptionPlanWithConnectedWallet(planId, button) {
-    if (!planId) return;
-    
-    // Check if Phantom wallet is connected
-    if (!connectedWallet.address || !connectedWallet.publicKey || !connectedWallet.provider) {
-        showToast('Please connect a wallet first', 'warning');
-        // Try to reconnect if provider exists but not fully connected
-        const provider = window.phantom?.solana || window.solana;
-        if (provider && provider.isPhantom) {
-            try {
-                await connectWallet();
-            } catch (error) {
-                console.error('Failed to reconnect wallet:', error);
-            }
-        }
-        return;
-    }
-    
-    // Verify wallet is still connected to Phantom
-    const provider = window.phantom?.solana || window.solana;
-    if (!provider || !provider.isConnected) {
-        showToast('Wallet disconnected. Please reconnect your Phantom wallet.', 'warning');
-        connectedWallet = {
-            provider: null,
-            publicKey: null,
-            address: null,
-            chainId: 'solana',
-            network: 'Solana',
-            balance: null
-        };
-        updateConnectedWalletUI();
-        return;
-    }
-    
-    // Check if user is logged in (required for subscription activation)
-    try {
-        const authCheck = await fetch(`${API_BASE_URL}/api/auth/status`, { credentials: 'include' });
-        const authData = authCheck.ok ? await authCheck.json() : {};
-        if (!authData.authenticated) {
-            showToast('Please login first to purchase a subscription. You need to be logged in to activate your subscription.', 'warning');
-            return;
-        }
-    } catch (authError) {
-        console.warn('Could not check authentication status:', authError);
-        // Continue anyway - backend will handle auth check
-    }
-    
-    const originalInnerHTML = button ? button.innerHTML : '';
-    if (button) {
-        button.disabled = true;
-        button.classList.add('loading');
-        button.innerHTML = `<span class="button-spinner"></span> Processing...`;
-    }
-    
-    try {
-        // Get plan details
-        const plansResponse = await fetch(`${API_BASE_URL}/api/subscriptions/plans`, { credentials: 'include' });
-        const plansPayload = plansResponse.ok ? await plansResponse.json() : { plans: [] };
-        const plan = plansPayload.plans.find(p => p.id === planId);
-        
-        if (!plan) {
-            throw new Error('Plan not found');
-        }
-        
-        const amount = parseFloat(plan.monthlyPriceUsd || 0);
-        
-        // Get recipient address from backend (with fallback to hardcoded address)
-        const FALLBACK_RECIPIENT_ADDRESS = '8fwoY65qh4UryqsjDy2FHw6Cz7x6rU5AZAS58rxhrgXY';
-        let recipientAddress = FALLBACK_RECIPIENT_ADDRESS;
-        
-        try {
-            const recipientResponse = await fetch(`${API_BASE_URL}/api/wallet/recipient-address?chain=solana`);
-            
-            if (recipientResponse.ok) {
-                const recipientData = await recipientResponse.json();
-                console.log('📥 Recipient address API response:', recipientData);
-                
-                // Try multiple possible response formats
-                recipientAddress = recipientData.recipientAddress || 
-                                 recipientData.address || 
-                                 recipientData.recipient || 
-                                 FALLBACK_RECIPIENT_ADDRESS;
-                
-                console.log('✅ Using recipient address from API:', recipientAddress);
-            } else {
-                console.warn('⚠️ Failed to get recipient address from API, using fallback:', recipientResponse.status);
-                const errorText = await recipientResponse.text().catch(() => '');
-                console.warn('   Error response:', errorText);
-            }
-        } catch (error) {
-            console.warn('⚠️ Error fetching recipient address, using fallback:', error);
-        }
-        
-        if (!recipientAddress || recipientAddress === FALLBACK_RECIPIENT_ADDRESS) {
-            console.log('📋 Using fallback recipient address:', FALLBACK_RECIPIENT_ADDRESS);
-            recipientAddress = FALLBACK_RECIPIENT_ADDRESS;
-        }
-        
-        // Validate recipient address format (Solana addresses are base58, 32-44 chars)
-        if (recipientAddress.length < 32 || recipientAddress.length > 44) {
-            console.error('❌ Invalid recipient address format:', recipientAddress);
-            throw new Error(`Invalid recipient address format: ${recipientAddress}`);
-        }
-        
-        console.log('💰 Final recipient address for payment:', recipientAddress);
-        console.log('   Expected: 8fwoY65qh4UryqsjDy2FHw6Cz7x6rU5AZAS58rxhrgXY');
-        console.log('   Match:', recipientAddress === '8fwoY65qh4UryqsjDy2FHw6Cz7x6rU5AZAS58rxhrgXY' ? '✅ YES' : '❌ NO');
-        
-        // Check balance
-        const balance = await getConnectedWalletUSDCBalance();
-        if (balance < amount) {
-            throw new Error(`Insufficient USDC balance. You have ${balance.toFixed(2)} USDC but need ${amount.toFixed(2)} USDC`);
-        }
-        
-        // Build Solana USDC transfer transaction using new SPL Token API (v0.4.x)
-        const { Connection, PublicKey, Transaction } = window.solanaWeb3 || solanaWeb3;
-        
-        // Get SPL Token functions from v0.4.x API
-        let getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, TOKEN_PROGRAM_ID;
-        
-        // Helper function to find SPL Token library
-        function findSPLTokenLib() {
-            // Only check window properties - the library should be exposed via window.splToken
-            const locations = [
-                window.splToken,
-                window.SolanaSPLToken,
-                (window.solanaWeb3 && window.solanaWeb3.splToken ? window.solanaWeb3.splToken : null)
-            ].filter(Boolean); // Remove null/undefined values
-            
-            for (const lib of locations) {
-                if (lib) {
-                    // Check if it has the functions we need (directly or in default)
-                    const checkLib = lib.default || lib;
-                    if (checkLib && (checkLib.getAssociatedTokenAddress || checkLib.getOrCreateAssociatedTokenAccount)) {
-                        return lib;
-                    }
-                }
-            }
-            return null;
-        }
-        
-        // Wait for SPL Token library to load (with timeout)
-        let splTokenLib = findSPLTokenLib();
-        const maxWaitTime = 8000; // 8 seconds max wait (increased for CDN loading)
-        const startTime = Date.now();
-        
-        while (!splTokenLib && (Date.now() - startTime) < maxWaitTime) {
-            await new Promise(resolve => setTimeout(resolve, 300)); // Check every 300ms
-            splTokenLib = findSPLTokenLib();
-            if (!splTokenLib) {
-                console.log(`⏳ Waiting for SPL Token library... (${Math.floor((Date.now() - startTime) / 1000)}s)`);
-            }
-        }
-        
-        if (!splTokenLib) {
-            console.error('❌ SPL Token library not found. Available window properties:', Object.keys(window).filter(k => k.toLowerCase().includes('spl') || k.toLowerCase().includes('token')));
-            throw new Error('SPL Token library not loaded. Please refresh the page. If the issue persists, check the browser console for loading errors.');
-        }
-        
-        console.log('✅ SPL Token library found, extracting functions...');
-        
-        // Extract functions - handle both default export and named exports (v0.4.x API)
-        // Try default export first
-        let libToUse = splTokenLib.default || splTokenLib;
-        
-        // Extract functions with fallback
-        getAssociatedTokenAddress = libToUse.getAssociatedTokenAddress || 
-                                    splTokenLib.getAssociatedTokenAddress ||
-                                    (splTokenLib.default && splTokenLib.default.getAssociatedTokenAddress);
-        
-        createTransferInstruction = libToUse.createTransferInstruction || 
-                                    splTokenLib.createTransferInstruction ||
-                                    (splTokenLib.default && splTokenLib.default.createTransferInstruction);
-        
-        createAssociatedTokenAccountInstruction = libToUse.createAssociatedTokenAccountInstruction || 
-                                                  splTokenLib.createAssociatedTokenAccountInstruction ||
-                                                  (splTokenLib.default && splTokenLib.default.createAssociatedTokenAccountInstruction);
-        
-        TOKEN_PROGRAM_ID = libToUse.TOKEN_PROGRAM_ID || 
-                          splTokenLib.TOKEN_PROGRAM_ID ||
-                          (splTokenLib.default && splTokenLib.default.TOKEN_PROGRAM_ID);
-        
-        // Debug logging
-        console.log('   getAssociatedTokenAddress:', typeof getAssociatedTokenAddress);
-        console.log('   createTransferInstruction:', typeof createTransferInstruction);
-        console.log('   createAssociatedTokenAccountInstruction:', typeof createAssociatedTokenAccountInstruction);
-        console.log('   TOKEN_PROGRAM_ID:', TOKEN_PROGRAM_ID ? 'found' : 'missing');
-        
-        // Verify required functions are available
-        if (!getAssociatedTokenAddress) {
-            console.error('❌ getAssociatedTokenAddress not found. Library keys:', Object.keys(libToUse).slice(0, 20));
-            throw new Error('SPL Token library missing getAssociatedTokenAddress function. Please refresh the page.');
-        }
-        
-        if (!createTransferInstruction) {
-            console.error('❌ createTransferInstruction not found. Library keys:', Object.keys(libToUse).slice(0, 20));
-            throw new Error('SPL Token library missing createTransferInstruction function. Please refresh the page.');
-        }
-        
-        if (!TOKEN_PROGRAM_ID) {
-            console.warn('⚠️ TOKEN_PROGRAM_ID not found, using fallback');
-            // Import TOKEN_PROGRAM_ID from @solana/spl-token if available, otherwise use the standard value
-            TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9ss623VQ5DA');
-        }
-        
-        console.log('✅ SPL Token library (v0.4.x) loaded and functions extracted successfully');
-        
-        // Use RPC from backend (Helius if available, otherwise official Solana RPC)
-        const rpcUrl = await getSolanaRpcUrl();
-        const connection = new Connection(rpcUrl, 'confirmed');
-        // Solana USDC mint address (Production Mainnet) - DO NOT CHANGE
-        const usdcMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
-        const recipientPublicKey = new PublicKey(recipientAddress);
-        
-        // USDC has 6 decimals
-        const decimals = 6;
-        const transferAmount = BigInt(Math.floor(amount * Math.pow(10, decimals)));
-        
-        // Get or create sender's USDC token account
-        const senderTokenAccount = await getAssociatedTokenAddress(
-            usdcMint,
-            connectedWallet.publicKey,
-            false, // allowOwnerOffCurve
-            TOKEN_PROGRAM_ID
-        );
-        
-        // Get recipient's associated token account address
-        const recipientTokenAccount = await getAssociatedTokenAddress(
-            usdcMint,
-            recipientPublicKey,
-            false, // allowOwnerOffCurve
-            TOKEN_PROGRAM_ID
-        );
-        
-        // Check if recipient token account exists
-        const recipientAccountInfo = await connection.getAccountInfo(recipientTokenAccount);
-        
-        const instructions = [];
-        
-        // If recipient doesn't have USDC account, create it first
-        if (!recipientAccountInfo) {
-            if (!createAssociatedTokenAccountInstruction) {
-                console.error('❌ createAssociatedTokenAccountInstruction not found. Library keys:', Object.keys(libToUse).slice(0, 20));
-                throw new Error('SPL Token library missing createAssociatedTokenAccountInstruction function. Please refresh the page.');
-            }
-            
-            instructions.push(
-                createAssociatedTokenAccountInstruction(
-                    connectedWallet.publicKey, // payer
-                    recipientTokenAccount, // ata
-                    recipientPublicKey, // owner
-                    usdcMint // mint
-                )
-            );
-        }
-        
-        // Add transfer instruction
-        // createTransferInstruction signature: (source, destination, owner, amount, multiSigners, programId)
-        instructions.push(
-            createTransferInstruction(
-                senderTokenAccount, // source
-                recipientTokenAccount, // destination
-                connectedWallet.publicKey, // owner
-                transferAmount, // amount
-                [], // multiSigners (empty array for single signer)
-                TOKEN_PROGRAM_ID // programId (REQUIRED - was missing, causing "InvalidProgramForExecution" error)
-            )
-        );
-        
-        // Build and send transaction
-        const transaction = new Transaction().add(...instructions);
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = connectedWallet.publicKey;
-        
-        // CRITICAL: Verify recipient address before sending
-        const EXPECTED_RECIPIENT = '8fwoY65qh4UryqsjDy2FHw6Cz7x6rU5AZAS58rxhrgXY';
-        const actualRecipient = recipientPublicKey.toBase58();
-        const recipientTokenAccountStr = recipientTokenAccount.toBase58();
-        
-        console.log('\n🔍🔍🔍 FINAL TRANSACTION VERIFICATION 🔍🔍🔍');
-        console.log('   Original recipientAddress variable:', recipientAddress);
-        console.log('   Recipient Wallet Address (owner):', actualRecipient);
-        console.log('   Recipient Token Account (ATA) - This is what Phantom shows as "Destination":', recipientTokenAccountStr);
-        console.log('   Expected recipient wallet:', EXPECTED_RECIPIENT);
-        console.log('   Match:', actualRecipient === EXPECTED_RECIPIENT ? '✅ YES' : '❌ NO');
-        console.log('');
-        console.log('   📝 NOTE: Phantom shows the ATA address (token account) as "Destination"');
-        console.log('   This is CORRECT! USDC tokens go to the ATA, which belongs to the recipient wallet.');
-        console.log('   The ATA is derived from: recipient wallet + USDC mint address');
-        console.log('   ⚠️ If wallet address doesn\'t match, check your server .env file for RECIPIENT_WALLET_ADDRESS_SOLANA');
-        
-        if (actualRecipient !== EXPECTED_RECIPIENT) {
-            console.error('\n❌❌❌ CRITICAL ERROR: Recipient address mismatch! ❌❌❌');
-            console.error('   Transaction will send USDC to:', actualRecipient);
-            console.error('   But expected recipient is:', EXPECTED_RECIPIENT);
-            console.error('   This means your server .env has wrong RECIPIENT_WALLET_ADDRESS_SOLANA');
-            console.error('   Or the API is returning wrong address');
-            throw new Error(`Recipient address mismatch! Transaction will send to ${actualRecipient} but expected ${EXPECTED_RECIPIENT}. Please check RECIPIENT_WALLET_ADDRESS_SOLANA in server .env file and restart server.`);
-        }
-        
-        console.log('✅✅✅ Recipient address verified - CORRECT! ✅✅✅');
-        console.log('   Transaction will send to:', EXPECTED_RECIPIENT);
-        
-        showToast('Please confirm the transaction in Phantom...', 'warning');
-        
-        // Sign and send transaction via Phantom (use provider from connectedWallet)
-        let txSignature;
-        try {
-            const result = await connectedWallet.provider.signAndSendTransaction(transaction);
-            
-            // Phantom returns { signature: '...' } - extract signature properly
-            if (typeof result === 'string') {
-                txSignature = result;
-            } else if (result && result.signature) {
-                txSignature = result.signature;
-            } else if (result && typeof result === 'object' && 'signature' in result) {
-                // Handle case where signature might be a PublicKey or other format
-                txSignature = result.signature.toString();
-            } else {
-                console.error('Unexpected transaction result format:', result);
-                throw new Error('Transaction signature not received from Phantom - unexpected response format');
-            }
-            
-            // Validate signature format (base58 string)
-            if (!txSignature || typeof txSignature !== 'string' || txSignature.length < 80) {
-                throw new Error('Invalid transaction signature received from Phantom');
-            }
-            
-            console.log('✅ Transaction signature received:', txSignature);
-        } catch (error) {
-            if (error.code === 4001) {
-                throw new Error('Transaction rejected by user');
-            } else if (error.code === -32603 || (error.message && error.message.includes('insufficient funds'))) {
-                throw new Error('Insufficient SOL for transaction fees. Please add some SOL to your wallet.');
-            } else if (error.message) {
-                throw new Error(`Transaction failed: ${error.message}`);
-            } else {
-                throw new Error(`Transaction failed: ${error.toString()}`);
-            }
-        }
-        
-        showToast('Transaction sent! Waiting for confirmation...', 'warning');
-        
-        // Wait for confirmation with retries and longer timeout
-        let confirmed = false;
-        const maxRetries = 10;
-        const retryDelay = 2000; // 2 seconds
-        
-        for (let i = 0; i < maxRetries; i++) {
-            try {
-                // Use new confirmation API format
-                const confirmation = await connection.confirmTransaction({
-                    signature: txSignature,
-                    blockhash,
-                    lastValidBlockHeight
-                }, 'confirmed');
-                
-                if (confirmation && confirmation.value && confirmation.value.err === null) {
-                    confirmed = true;
-                    console.log('✅ Transaction confirmed on-chain');
-                    break;
-                }
-            } catch (confirmError) {
-                console.log(`⏳ Confirmation attempt ${i + 1}/${maxRetries}...`);
-                if (i < maxRetries - 1) {
-                    await new Promise(resolve => setTimeout(resolve, retryDelay));
-                } else {
-                    console.warn('⚠️ Confirmation timeout after retries, but transaction may still succeed:', confirmError);
-                    // Continue anyway - transaction might still be processing
-                }
-            }
-        }
-        
-        if (!confirmed) {
-            console.warn('⚠️ Transaction confirmation pending, but proceeding with backend verification');
-        }
-        
-        // Send payment via x402 protocol to backend
-        // Encode payment proof as base64 (x402 format)
-        const paymentProof = Buffer.from(JSON.stringify({
-            txHash: txSignature,
-            chain: 'solana',
-            source: 'phantom-wallet'
-        })).toString('base64');
-        
-        const paymentResponse = await fetch(`${API_BASE_URL}/api/subscriptions/purchase`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Payment': paymentProof
-            },
-            body: JSON.stringify({
-                planId,
-                autoRenew: false
-            })
-        });
-        
-        if (!paymentResponse.ok) {
-            const errorData = await paymentResponse.json().catch(() => ({}));
-            
-            // Check if it's an authentication error
-            if (paymentResponse.status === 401) {
-                throw new Error('Please login first to activate your subscription. The payment was successful, but you need to be logged in to receive your subscription.');
-            }
-            
-            // Provide detailed error messages
-            let errorMessage = errorData.message || errorData.error || `Failed to activate subscription (${paymentResponse.status})`;
-            
-            // Add helpful context for common errors
-            if (paymentResponse.status === 402) {
-                if (errorData.message && errorData.message.includes('Transaction not found')) {
-                    errorMessage = 'Transaction is still being processed. Please wait a moment and try again, or contact support if the issue persists.';
-                } else if (errorData.message && errorData.message.includes('Payment verification failed')) {
-                    errorMessage = `Payment verification failed: ${errorData.message}. The transaction was sent but could not be verified. Please check the transaction on Solana Explorer and contact support if needed.`;
-                } else {
-                    errorMessage = `Payment issue: ${errorData.message || errorMessage}. Please check your transaction and try again.`;
-                }
-            }
-            
-            // Log detailed error for debugging
-            console.error('Payment response error:', {
-                status: paymentResponse.status,
-                errorData,
-                txHash: txSignature
-            });
-            
-            throw new Error(errorMessage);
-        }
-        
-        const data = await paymentResponse.json();
-        showToast('Subscription activated successfully!', 'success');
-        
-        // CRITICAL: Force refresh subscription status to unlock features
-        console.log('✅ Payment successful - refreshing subscription status...');
-        subscriptionStatusLoaded = false; // Force reload
-        await loadSubscriptionStatus(true); // Force refresh from server
-        
-        // Update UI to reflect new subscription
-        updateNotificationAccess();
-        updatePaywallState();
-        
-        // Update Pro AI Chat badge
-        await checkChatProStatus();
-        
-        // If on AI Token Calls dashboard, reload it to unlock
-        if (activeDashboard === 'ai-token-calls') {
-            await openAITokenCalls(true);
-        }
-        
-        // Refresh dashboard
-        await openConnectedWalletDashboard();
-    } catch (error) {
-        console.error('Subscription purchase error:', error);
-        
-        // Provide user-friendly error messages
-        let userMessage = error.message || 'Failed to activate subscription';
-        
-        // Handle specific error types
-        if (userMessage.includes('Transaction rejected')) {
-            userMessage = 'Transaction was cancelled. Please try again when ready.';
-        } else if (userMessage.includes('Insufficient SOL')) {
-            userMessage = 'Insufficient SOL for transaction fees. Please add some SOL to your wallet to pay for transaction fees.';
-        } else if (userMessage.includes('Insufficient USDC')) {
-            userMessage = error.message; // Keep the original message with balance info
-        } else if (userMessage.includes('SPL Token library')) {
-            userMessage = 'Payment system error. Please refresh the page and try again.';
-        } else if (userMessage.includes('Transaction failed')) {
-            userMessage = 'Transaction failed. Please check your wallet balance and try again.';
-        }
-        
-        showToast(userMessage, 'error');
-    } finally {
-        if (button) {
-            button.disabled = false;
-            button.classList.remove('loading');
-            button.innerHTML = originalInnerHTML;
-        }
-    }
-}
-
-// Get chain name from chain ID (for Solana, always returns 'solana')
-function getChainFromChainId(chainId) {
-    if (chainId === 'solana') return 'solana';
-    const chainMap = {
-        1: 'ethereum',
-        8453: 'base',
-        56: 'bnb',
-        137: 'polygon',
-        42161: 'arbitrum',
-        10: 'optimism'
-    };
-    return chainMap[chainId] || 'ethereum';
-}
-
-// Close connected wallet dashboard
-function closeConnectedWalletDashboard() {
-    document.getElementById('connected-wallet-dashboard-modal').classList.remove('active');
-}
-
-// Initialize connected wallet on page load
-async function initializeConnectedWallet() {
-    const connectBtn = document.getElementById('connect-wallet-button');
-    if (!connectBtn) return;
-    
-    // Set up click handler
-    connectBtn.onclick = () => connectWallet();
-    
-    // Check if Phantom wallet is already connected (from previous session)
-    const provider = window.phantom?.solana || window.solana;
-    if (provider && provider.isPhantom && provider.isConnected) {
-        try {
-            const publicKey = provider.publicKey;
-            const address = publicKey.toBase58();
-            
-            // Get SOL balance - use RPC from backend (Helius if available, otherwise official Solana RPC)
-            const { Connection } = window.solanaWeb3 || solanaWeb3;
-            const rpcUrl = await getSolanaRpcUrl();
-            const connection = new Connection(rpcUrl, 'confirmed');
-            const balance = await connection.getBalance(publicKey);
-            const balanceFormatted = balance / 1_000_000_000; // LAMPORTS_PER_SOL
-            
-            connectedWallet = {
-                provider: provider,
-                publicKey: publicKey,
-                address: address,
-                chainId: 'solana',
-                network: 'Solana',
-                balance: balanceFormatted
-            };
-
-            updateConnectedWalletUI();
-            
-            // Listen for account changes
-            provider.on('accountChanged', handleAccountsChanged);
-            provider.on('disconnect', handleDisconnect);
-        } catch (error) {
-            console.warn('Could not reconnect to Phantom wallet:', error);
-        }
-    }
-    
-    // Always show connect button
-    updateConnectedWalletUI();
-}
-
+// Open-source: No subscription purchases needed
 async function purchaseSubscriptionPlan(planId, button) {
-    if (!planId) return;
-    if (!currentUser) {
-        showToast('Please login to manage your subscription', 'warning');
-        return;
-    }
-    
-    const originalInnerHTML = button ? button.innerHTML : '';
-    if (button) {
-        button.disabled = true;
-        button.classList.add('loading');
-        button.innerHTML = `<span class="button-spinner"></span> Processing...`;
-    }
-    
-    try {
-        // Get main wallet chain to send with payment request
-        const mainWalletChain = getMainWalletChain();
-        console.log(`💳 Sending payment request with main wallet chain: ${mainWalletChain}`);
-        
-        const response = await fetch(`${API_BASE_URL}/api/subscriptions/purchase`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ 
-                planId,
-                mainWalletChain: mainWalletChain // Send main wallet chain to server
-            })
-        });
-        
-        if (response.status === 402) {
-            const errorData = await response.json().catch(() => ({}));
-            let message = errorData.message || 'Insufficient USDC balance. Deposit funds and try again.';
-            
-            // Show balance information
-            if (errorData.balance !== undefined) {
-                const balance = parseFloat(errorData.balance || 0);
-                if (balance > 0) {
-                    message += ` Your current balance: ${balance.toFixed(2)} USDC`;
-                } else {
-                    message += ` Your current balance: 0 USDC`;
-                }
-            }
-            
-            // Show detailed balance information if available
-            if (errorData.balances) {
-                const balanceInfo = [];
-                for (const [chain, info] of Object.entries(errorData.balances)) {
-                    if (parseFloat(info.balance || 0) > 0) {
-                        balanceInfo.push(`${chain.toUpperCase()}: ${parseFloat(info.balance).toFixed(2)} USDC`);
-                    }
-                }
-                if (balanceInfo.length > 0) {
-                    message += ` Your balances: ${balanceInfo.join(', ')}`;
-                }
-            }
-            
-            // Show balance check errors if available (for debugging)
-            if (errorData.balanceErrors) {
-                const errors = [];
-                for (const [chain, errorMsg] of Object.entries(errorData.balanceErrors)) {
-                    if (errorMsg) {
-                        errors.push(`${chain}: ${errorMsg}`);
-                    }
-                }
-                if (errors.length > 0) {
-                    console.error('Balance check errors:', errorData.balanceErrors);
-                    // Add to message if there are critical errors
-                    const criticalErrors = errors.filter(e => !e.includes('Insufficient balance'));
-                    if (criticalErrors.length > 0) {
-                        message += ` Errors: ${criticalErrors.join('; ')}`;
-                    }
-                }
-            }
-            
-            // Show wallet address if available
-            if (errorData.walletAddress) {
-                console.log('Wallet address checked:', errorData.walletAddress);
-            }
-            
-            if (errorData.lastError) {
-                console.error('Payment processing error:', errorData.lastError);
-                if (errorData.lastError.message) {
-                    message += ` Error: ${errorData.lastError.message}`;
-                }
-            }
-            
-            showToast(message, 'error');
-            if (errorData.accepts && Array.isArray(errorData.accepts)) {
-                console.info('Payment instructions:', errorData.accepts);
-            }
-            return;
-        }
-        
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || errorData.message || 'Failed to activate subscription');
-        }
-        
-        const data = await response.json();
-        if (data && data.subscription) {
-            showToast('Subscription updated successfully!', 'success');
-        } else {
-            showToast('Subscription activated.', 'success');
-        }
-        await loadSubscriptionStatus(true);
-        openWalletDashboard();
-    } catch (error) {
-        console.error('Subscription purchase error:', error);
-        showToast(error.message || 'Failed to activate subscription', 'error');
-    } finally {
-        if (button) {
-            button.disabled = false;
-            button.classList.remove('loading');
-            button.innerHTML = originalInnerHTML;
-        }
-    }
+    showToast('Open-source version: No payment required. Configure your API keys in .env file.', 'info');
 }
 async function generateSubscriptionApiKey(button) {
     if (!currentUser) {
@@ -5115,13 +4113,12 @@ async function analyzeToken(token) {
                 showTokenDetailsModal(currentToken);
             }
         } else if (response.status === 402) {
+            // Open-source: Should not receive 402 errors (no payment required)
+            // If we do, it's likely an API key issue
             const errorData = await response.json().catch(() => ({}));
             modal.classList.remove('active');
-            const warningMessage = errorData.error === 'insufficient_cu'
-                ? 'You are out of compute units. Please upgrade or top up your subscription.'
-                : 'Activate a subscription plan to run full AI analysis.';
+            const warningMessage = errorData.message || 'Analysis failed. Please check your API keys in .env file.';
             showToast(warningMessage, 'warning');
-            await showPaymentModal(errorData);
         } else {
             const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.message || 'Analysis failed');
@@ -5135,74 +4132,9 @@ async function analyzeToken(token) {
 }
 
 // ===== Show Payment Modal =====
+// Open-source: Payment modal removed - no payment required
 async function showPaymentModal(paymentInfo = {}) {
-    const modal = document.getElementById('payment-modal');
-    if (!modal) return;
-
-    modal.classList.add('active');
-    
-    const descriptionEl = modal.querySelector('.payment-description');
-    if (descriptionEl) {
-        descriptionEl.textContent = paymentInfo.message || 'Activate a compute unit subscription to unlock AI-powered token analysis. Each run consumes 1 Compute Unit (CU).';
-    }
-
-    const amountEl = modal.querySelector('[data-payment-amount]');
-    if (amountEl) {
-        amountEl.textContent = '1 Compute Unit';
-    }
-
-    const planListEl = document.getElementById('subscription-plan-list');
-    if (planListEl) {
-        const plans = Array.isArray(paymentInfo.plans) ? paymentInfo.plans : [];
-        if (plans.length > 0) {
-            planListEl.innerHTML = plans.map(plan => {
-                const price = Number(plan.monthlyPriceUsd || 0).toFixed(2);
-                const cu = Number(plan.monthlyCu || 0);
-                const safeDescription = (plan.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                return `
-                    <div class="subscription-plan-card">
-                        <div class="plan-heading">
-                            <h5>${plan.name}</h5>
-                        <div class="plan-price">$${price} <span>per package</span></div>
-                        </div>
-                        <div class="plan-cu">${cu} Compute Units</div>
-                        ${safeDescription ? `<p class="plan-description">${safeDescription}</p>` : ''}
-                            </div>
-                        `;
-            }).join('');
-        } else {
-            planListEl.innerHTML = `<p class="payment-note">Subscription plans are loading. Open the dashboard to view the latest pricing.</p>`;
-        }
-    }
-
-    const statusDiv = document.getElementById('payment-status');
-    if (statusDiv) {
-        if (!currentUser) {
-            statusDiv.innerHTML = `<div class="payment-alert warning">Login with Google to select a subscription plan.</div>`;
-        } else if (paymentInfo.error === 'insufficient_cu') {
-            const remaining = typeof paymentInfo.remainingCu === 'number'
-                ? paymentInfo.remainingCu
-                : (paymentInfo.subscription && typeof paymentInfo.subscription.cuBalance === 'number'
-                    ? paymentInfo.subscription.cuBalance
-                    : 0);
-            const renewal = paymentInfo.subscription?.renewalDate ? formatDateTime(paymentInfo.subscription.renewalDate) : null;
-            statusDiv.innerHTML = `
-                <div class="payment-alert danger">
-                    You have ${remaining} CU remaining. Each analysis uses 1 CU.${renewal ? ` Next renewal: ${renewal}.` : ''}
-                </div>
-            `;
-        } else {
-            statusDiv.innerHTML = `<div class="payment-alert info">Your compute-unit balance is shared between the web app and SDK. Each analysis consumes 1 CU.</div>`;
-        }
-    }
-
-    const actionButton = document.getElementById('payment-button');
-    if (actionButton) {
-        actionButton.innerHTML = !currentUser
-            ? '<span>Login with Google</span>'
-            : '<span>Open Subscription Dashboard</span>';
-        actionButton.disabled = false;
-    }
+    console.log('Payment modal called (open-source: no payment required)');
 }
 
 // ===== Close Payment Modal =====
@@ -8897,17 +7829,11 @@ async function checkChatProStatus() {
         
         if (response.ok) {
             const data = await response.json();
-            // Fix: Check subscription.status, not data.status
-            const subscription = data.subscription || data;
-            const isPro = subscription && subscription.status === 'active';
-            updateChatProBadge(isPro, subscription);
-        } else {
-            // No subscription - not PRO
-            updateChatProBadge(false, null);
+            const isPro = data.status === 'active';
+            updateChatProBadge(isPro, data);
         }
     } catch (error) {
         console.warn('Could not check subscription status for chat:', error);
-        updateChatProBadge(false, null);
     }
 }
 

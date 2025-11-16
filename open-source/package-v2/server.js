@@ -10,66 +10,15 @@ const passport = require('passport');
 
 // Import auth and wallet services
 const { initializePassport, requireAuth, isAuthenticated, getUserById, loadUsers, saveUsers } = require('./auth');
-const walletService = require('./wallet-service');
-const subscriptionService = require('./subscription-service');
 
 const app = express();
 const cache = new NodeCache({ stdTTL: 600 }); // 10-minute default cache
 const fs = require('fs').promises;
 const path = require('path');
 
-function sanitizeSubscriptionForClient(subscription) {
-  if (!subscription) return null;
-  return {
-    status: subscription.status,
-    planId: subscription.planId,
-    planName: subscription.planName,
-    cuBalance: subscription.cuBalance,
-    monthlyCu: subscription.monthlyCu,
-    renewalDate: subscription.renewalDate,
-    autoRenew: subscription.autoRenew
-  };
-}
 
-async function requireActiveSubscriptionAccess(req, res, next) {
-  try {
-    if (!req.isAuthenticated || !req.user) {
-      return res.status(401).json({
-        error: 'authentication_required',
-        message: 'Login is required to access AI token calls.',
-        authenticated: false
-      });
-    }
 
-    const subscription = await subscriptionService.getSubscriptionStatus(req.user.id);
-    if (!subscription || subscription.status !== 'active') {
-      return res.status(402).json({
-        error: 'subscription_required',
-        message: 'Activate a subscription plan to unlock AI token calls.',
-        subscription: sanitizeSubscriptionForClient(subscription)
-      });
-    }
 
-    const remaining = Number(subscription.cuBalance || 0);
-    if (Number.isNaN(remaining) || remaining <= 0) {
-      return res.status(402).json({
-        error: 'insufficient_cu',
-        message: 'Your compute unit balance is 0. Purchase additional compute units to continue.',
-        subscription: sanitizeSubscriptionForClient(subscription)
-      });
-    }
-
-    req.subscription = subscription;
-    next();
-  } catch (error) {
-    console.error('Subscription access check failed:', error);
-    res.status(500).json({
-      error: 'subscription_check_failed',
-      message: 'Unable to verify subscription status.',
-      details: error.message
-    });
-  }
-}
 
 // Initialize Moralis
 let moralisInitialized = false;
@@ -128,7 +77,7 @@ app.post('/api/subscriptions/activate', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/subscriptions/purchase', requireAuth, async (req, res) => {
+app.post('/api/subscriptions/purchase', requireAuth, (req, res) => {
   const { planId, autoRenew, txHash } = req.body || {};
 
   if (!planId) {
@@ -142,8 +91,7 @@ app.post('/api/subscriptions/purchase', requireAuth, async (req, res) => {
 
   const requiredAmount = plan.monthlyPriceUsd.toFixed(2);
   
-  // Use x402 payment protocol for Phantom wallet payments (Solana only)
-  console.log(`📋 Processing subscription purchase via x402 protocol (Solana USDC)`);
+  // Use x402PaymentMiddleware to handle payment (all payments go through x402 facilitators)
   const middleware = x402PaymentMiddleware(requiredAmount);
 
   middleware(req, res, async (err) => {
@@ -266,373 +214,6 @@ app.delete('/api/subscriptions/api-keys/:keyId', requireAuth, async (req, res) =
   }
 });
 
-// Get recipient address for connected wallet payments (public endpoint - not sensitive)
-app.get('/api/wallet/recipient-address', async (req, res) => {
-  try {
-    const { chain } = req.query;
-    
-    if (!chain) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Chain parameter is required' 
-      });
-    }
-    
-    const chainName = chain.toLowerCase();
-    const recipientAddress = getRecipientWallet(chainName);
-    
-    // Log for debugging
-    console.log(`📤 Recipient address request: chain=${chainName}, address=${recipientAddress}`);
-    console.log(`   RECIPIENT_WALLETS.solana: ${RECIPIENT_WALLETS.solana}`);
-    console.log(`   RECIPIENT_WALLETS.evm: ${RECIPIENT_WALLETS.evm}`);
-    console.log(`   ENV RECIPIENT_WALLET_ADDRESS_SOLANA: ${process.env.RECIPIENT_WALLET_ADDRESS_SOLANA ? 'SET' : 'MISSING'}`);
-    
-    if (!recipientAddress) {
-      console.error(`❌ No recipient address found for chain: ${chainName}`);
-      return res.status(500).json({
-        success: false,
-        error: 'Recipient address not configured',
-        message: `No recipient address found for chain: ${chainName}. Please check server configuration.`
-      });
-    }
-    
-    res.json({
-      success: true,
-      recipientAddress: recipientAddress,
-      chain: chainName
-    });
-  } catch (error) {
-    console.error('Error getting recipient address:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message || 'Failed to get recipient address' 
-    });
-  }
-});
-
-// Get Solana RPC URL for frontend (public endpoint)
-app.get('/api/config/solana-rpc', async (req, res) => {
-  try {
-    const heliusApiKey = process.env.HELIUS_API_KEY;
-    const moralisApiKey = process.env.MORALIS_API_KEY;
-    
-    // Priority: Helius > Moralis > Official Solana RPC
-    let rpcUrl = 'https://api.mainnet-beta.solana.com'; // Default: Official Solana RPC (no rate limits)
-    
-    if (heliusApiKey && heliusApiKey.trim()) {
-      rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey.trim()}`;
-    } else if (moralisApiKey && moralisApiKey.trim()) {
-      const customMoralisRpcUrl = process.env.MORALIS_SOLANA_RPC_URL;
-      rpcUrl = customMoralisRpcUrl && customMoralisRpcUrl.trim()
-        ? customMoralisRpcUrl.trim()
-        : `https://solana-mainnet.moralis.io/${moralisApiKey.trim()}`;
-    }
-    
-    res.json({
-      success: true,
-      rpcUrl: rpcUrl,
-      provider: heliusApiKey ? 'helius' : (moralisApiKey ? 'moralis' : 'official')
-    });
-  } catch (error) {
-    console.error('Error getting Solana RPC config:', error);
-    // Return default RPC on error
-    res.json({
-      success: true,
-      rpcUrl: 'https://api.mainnet-beta.solana.com',
-      provider: 'official'
-    });
-  }
-});
-
-// Purchase subscription with connected wallet (MetaMask/external wallet)
-app.post('/api/subscriptions/purchase-with-connected-wallet', requireAuth, async (req, res) => {
-  try {
-    const { planId, txHash, chain, amount, fromAddress } = req.body || {};
-
-    if (!planId) {
-      return res.status(400).json({ success: false, error: 'planId is required' });
-    }
-
-    if (!txHash) {
-      return res.status(400).json({ success: false, error: 'txHash is required' });
-    }
-
-    if (!chain) {
-      return res.status(400).json({ success: false, error: 'chain is required' });
-    }
-
-    if (!amount) {
-      return res.status(400).json({ success: false, error: 'amount is required' });
-    }
-
-    const plan = subscriptionService.getPlanById(planId);
-    if (!plan) {
-      return res.status(400).json({ success: false, error: 'Invalid subscription plan' });
-    }
-
-    const requiredAmount = plan.monthlyPriceUsd.toFixed(2);
-    const chainName = chain.toLowerCase();
-
-    // Verify the transaction
-    try {
-      if (chainName === 'solana') {
-        // Verify Solana USDC transfer transaction
-        const { Connection, PublicKey } = require('@solana/web3.js');
-        const { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } = require('@solana/spl-token');
-        const connection = new Connection(
-          walletService.NETWORKS.solana.rpcUrl,
-          'confirmed'
-        );
-
-        const signature = txHash;
-        
-        // Retry logic for transaction fetching (transaction might not be immediately available)
-        let tx = null;
-        const maxRetries = 5;
-        const retryDelay = 2000; // 2 seconds
-        
-        for (let i = 0; i < maxRetries; i++) {
-          try {
-            tx = await connection.getTransaction(signature, {
-              commitment: 'confirmed',
-              maxSupportedTransactionVersion: 0
-            });
-            
-            if (tx) {
-              break; // Transaction found, exit retry loop
-            }
-          } catch (fetchError) {
-            console.log(`⏳ Transaction fetch attempt ${i + 1}/${maxRetries}...`);
-            if (i < maxRetries - 1) {
-              await new Promise(resolve => setTimeout(resolve, retryDelay));
-            } else {
-              console.error('Failed to fetch transaction after retries:', fetchError);
-            }
-          }
-        }
-
-        if (!tx) {
-          return res.status(402).json({
-            success: false,
-            error: 'Transaction not found',
-            message: 'Solana transaction not found. Please wait a moment and try again, or check the transaction on Solana Explorer.'
-          });
-        }
-
-        if (tx.meta && tx.meta.err) {
-          return res.status(402).json({
-            success: false,
-            error: 'Transaction failed',
-            message: `Solana transaction failed: ${JSON.stringify(tx.meta.err)}`
-          });
-        }
-
-        // Verify USDC transfer to recipient
-        // TOKEN_PROGRAM_ID already imported above
-        const usdcMint = new PublicKey(walletService.NETWORKS.solana.usdcMint);
-        const recipientPublicKey = new PublicKey(getRecipientWallet('solana'));
-        const recipientTokenAddress = await getAssociatedTokenAddress(
-          usdcMint,
-          recipientPublicKey,
-          false, // allowOwnerOffCurve
-          TOKEN_PROGRAM_ID
-        );
-
-        // Parse transaction to find USDC transfer
-        let paymentVerified = false;
-        let transferAmount = 0;
-        let verificationDetails = {};
-
-        if (tx.meta && tx.meta.preTokenBalances && tx.meta.postTokenBalances) {
-          // Check token balance changes for recipient's USDC account
-          for (const postBalance of tx.meta.postTokenBalances) {
-            if (postBalance.accountIndex !== undefined) {
-              const accountKey = tx.transaction.message.accountKeys[postBalance.accountIndex];
-              if (accountKey && accountKey.toString() === recipientTokenAddress.toString()) {
-                // Found recipient's USDC account
-                const preBalance = tx.meta.preTokenBalances.find(
-                  pre => pre.accountIndex === postBalance.accountIndex
-                );
-
-                const preAmount = preBalance ? parseFloat(preBalance.uiTokenAmount.uiAmountString || '0') : 0;
-                const postAmount = parseFloat(postBalance.uiTokenAmount.uiAmountString || '0');
-
-                // Check if USDC mint matches
-                if (postBalance.mint === usdcMint.toString()) {
-                  transferAmount = postAmount - preAmount;
-                  verificationDetails = {
-                    preAmount,
-                    postAmount,
-                    transferAmount,
-                    requiredAmount: parseFloat(requiredAmount),
-                    mint: postBalance.mint,
-                    expectedMint: usdcMint.toString()
-                  };
-                  
-                  if (transferAmount >= parseFloat(requiredAmount)) {
-                    paymentVerified = true;
-                    break;
-                  }
-                }
-              }
-            }
-          }
-          
-          // If not found via recipient account, check all token balance changes
-          if (!paymentVerified) {
-            console.log('⚠️ Payment not found via recipient account, checking all token transfers...');
-            for (const postBalance of tx.meta.postTokenBalances) {
-              if (postBalance.mint === usdcMint.toString()) {
-                const preBalance = tx.meta.preTokenBalances.find(
-                  pre => pre.accountIndex === postBalance.accountIndex && pre.mint === usdcMint.toString()
-                );
-                const preAmount = preBalance ? parseFloat(preBalance.uiTokenAmount.uiAmountString || '0') : 0;
-                const postAmount = parseFloat(postBalance.uiTokenAmount.uiAmountString || '0');
-                const delta = postAmount - preAmount;
-                
-                if (delta > 0) {
-                  console.log(`Found USDC transfer: ${delta} USDC to account index ${postBalance.accountIndex}`);
-                  // Check if this account belongs to recipient
-                  if (postBalance.accountIndex !== undefined) {
-                    const accountKey = tx.transaction.message.accountKeys[postBalance.accountIndex];
-                    if (accountKey && accountKey.toString() === recipientTokenAddress.toString()) {
-                      transferAmount = delta;
-                      if (transferAmount >= parseFloat(requiredAmount)) {
-                        paymentVerified = true;
-                        break;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        if (!paymentVerified) {
-          console.error('Payment verification failed. Details:', {
-            signature,
-            recipientTokenAddress: recipientTokenAddress.toString(),
-            requiredAmount,
-            transferAmount,
-            verificationDetails,
-            hasTokenBalances: !!(tx.meta && tx.meta.postTokenBalances),
-            tokenBalanceCount: tx.meta?.postTokenBalances?.length || 0
-          });
-          
-          return res.status(402).json({
-            success: false,
-            error: 'Payment verification failed',
-            message: `Could not verify USDC transfer of ${requiredAmount} USDC to recipient address. Found transfer: ${transferAmount} USDC. Please check the transaction on Solana Explorer.`,
-            details: verificationDetails
-          });
-        }
-        
-        console.log(`✅ Payment verified: ${transferAmount} USDC transferred (required: ${requiredAmount})`);
-      } else {
-        // Verify EVM transaction (Base, Ethereum, BNB)
-        const network = walletService.NETWORKS[chainName];
-        if (!network || !network.rpcUrl) {
-          return res.status(400).json({
-            success: false,
-            error: 'Invalid chain',
-            message: `Chain ${chainName} not supported for payment verification`
-          });
-        }
-
-        const provider = new ethers.JsonRpcProvider(network.rpcUrl);
-        const tx = await provider.getTransaction(txHash);
-
-        if (!tx) {
-          return res.status(402).json({
-            success: false,
-            error: 'Transaction not found',
-            message: 'Transaction not found on blockchain'
-          });
-        }
-
-        // Wait for transaction receipt
-        const receipt = await provider.getTransactionReceipt(txHash);
-
-        if (!receipt || receipt.status !== 1) {
-          return res.status(402).json({
-            success: false,
-            error: 'Transaction failed',
-            message: 'Transaction failed or pending'
-          });
-        }
-
-        // Verify USDC contract and amount
-        const usdcInterface = new ethers.Interface([
-          'function transfer(address to, uint256 amount) returns (bool)'
-        ]);
-
-        try {
-          const decodedData = usdcInterface.parseTransaction({ data: tx.data, value: tx.value });
-          const transferAmount = ethers.formatUnits(decodedData.args[1], 6); // USDC has 6 decimals
-          const transferTo = decodedData.args[0].toLowerCase();
-
-          const expectedRecipient = getRecipientWallet(chainName);
-          if (transferTo !== expectedRecipient.toLowerCase()) {
-            return res.status(402).json({
-              success: false,
-              error: 'Invalid payment recipient',
-              message: 'Payment sent to wrong address'
-            });
-          }
-
-          if (parseFloat(transferAmount) < parseFloat(requiredAmount)) {
-            return res.status(402).json({
-              success: false,
-              error: 'Insufficient payment amount',
-              message: `Required: ${requiredAmount} USDC, Received: ${transferAmount} USDC`
-            });
-          }
-        } catch (decodeError) {
-          // If decode fails, it might not be a USDC transfer
-          return res.status(402).json({
-            success: false,
-            error: 'Invalid payment proof',
-            message: 'Transaction is not a valid USDC transfer'
-          });
-        }
-      }
-
-      // Payment verified - activate subscription
-      const subscription = await subscriptionService.activateSubscription(req.user.id, planId, {
-        autoRenew: false, // Default to false for connected wallet payments
-        paymentSource: 'connected-wallet',
-        txHash: txHash,
-        chain: chainName
-      });
-
-      res.json({
-        success: true,
-        subscription: subscription,
-        payment: {
-          txHash: txHash,
-          chain: chainName,
-          amount: requiredAmount,
-          source: 'connected-wallet'
-        }
-      });
-    } catch (verifyError) {
-      console.error('Payment verification error:', verifyError);
-      return res.status(402).json({
-        success: false,
-        error: 'Payment verification failed',
-        message: verifyError.message || 'Failed to verify payment transaction'
-      });
-    }
-  } catch (error) {
-    console.error('Error processing connected wallet payment:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to process payment'
-    });
-  }
-});
-
 // Configuration
 function normalizeTwitterHandle(handle) {
   if (!handle) return null;
@@ -695,10 +276,7 @@ function normalizeSolanaRecipientWallet(address) {
   }
 }
 
-const RECIPIENT_WALLETS = walletService.recipientAddresses || {
-  evm: normalizeRecipientWallet(process.env.RECIPIENT_WALLET_ADDRESS),
-  solana: normalizeSolanaRecipientWallet(process.env.RECIPIENT_WALLET_ADDRESS_SOLANA)
-};
+const RECIPIENT_WALLETS = 
 
 // Log recipient addresses on startup (for debugging)
 console.log('💰 Recipient Wallets Configured:', {
@@ -721,14 +299,12 @@ const CONFIG = {
   openaiApiKey: process.env.OPENAI_API_KEY,
   twitterApiKey: process.env.TWITTER_API_KEY,
   grokApiKey: process.env.GROK_API_KEY || '', // Grok API key for Twitter insights
-  recipientWallet: getRecipientWallet('base'),
-  recipientWallets: RECIPIENT_WALLETS,
-  baseRpcUrl: process.env.BASE_RPC_URL || 'https://mainnet.base.org',
-  facilitatorUrl: process.env.FACILITATOR_URL || 'https://facilitator.coinbase.com', // Base x402 facilitator
-  facilitatorUrlSolana: process.env.FACILITATOR_URL_SOLANA || 'https://facilitator.coinbase.com', // Solana x402 facilitator
-  facilitatorUrlEthereum: process.env.FACILITATOR_URL_ETHEREUM || 'https://facilitator.coinbase.com', // Ethereum x402 facilitator
-  facilitatorUrlBnb: process.env.FACILITATOR_URL_BNB || 'https://facilitator.coinbase.com', // BNB Chain x402 facilitator
-  usdcContract: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // Base USDC
+      baseRpcUrl: process.env.BASE_RPC_URL || 'https://mainnet.base.org',
+   // Base x402 facilitator
+   // Solana x402 facilitator
+   // Ethereum x402 facilitator
+   // BNB Chain x402 facilitator
+   // Base USDC
   rugCheckApiKey: process.env.RUGCHECK_API_KEY || '', // Optional: RugCheck API key
   twitterUsername: TWITTER_USERNAME, // Your Twitter/X username for quest verification
   heliusApiKey: process.env.HELIUS_API_KEY || '', // Optional: Helius API key for enhanced metadata
@@ -754,7 +330,6 @@ const INTERNAL_BASE_URL = (process.env.INTERNAL_BASE_URL
 const RUGCHECK_SAFE_THRESHOLD = 29; // Require RugCheck score <= 29 to qualify
 const RUGCHECK_CACHE_TTL = 30 * 60; // 30 minutes
 
-const ANALYSIS_CU_COST = 1;
 
 function getRugCheckStatusLabel(score) {
   if (score === null || score === undefined || Number.isNaN(Number(score))) {
@@ -1362,79 +937,57 @@ const DEMO_TOKENS = [
 ];
 // x402 Payment Middleware - All payments go through x402 facilitators (Base, Solana, Ethereum, BNB)
 // No direct wallet-to-wallet transfers - all payments must use x402 protocol
-const x402PaymentMiddleware = (requiredAmount) => {
-  return async (req, res, next) => {
-    // Check if this is a preview request (skip payment)
-    // Express normalizes headers to lowercase, so check lowercase version
-    const previewHeader = req.headers['x-preview'] || req.headers['x-preview'];
-    const isPreview = previewHeader === 'true' || req.body?.preview === true;
-    
-    console.log('🔍 Payment middleware check:', {
-      'x-preview header': req.headers['x-preview'],
-      'all headers keys': Object.keys(req.headers).filter(k => k.toLowerCase().includes('preview')),
-      'body preview': req.body?.preview,
-      'isPreview': isPreview,
-      'method': req.method,
-      'url': req.url
-    });
-    
-    if (isPreview) {
-      console.log('👁️ ✅ Preview mode detected - skipping payment verification');
-      // Add preview header to response
-      res.setHeader('X-PAYMENT-RESPONSE', Buffer.from(JSON.stringify({
-        verified: true,
-        source: 'preview',
-        timestamp: new Date().toISOString()
-      })).toString('base64'));
-      return next();
-    }
-    
-    // Payment verification required (bypass removed)
-    
-    // FIRST: Check if client already sent payment proof (x-payment header)
-    // If yes, skip all server-side attempts and verify directly
-    const paymentHeader = req.headers['x-payment'];
-    
-    if (paymentHeader) {
-      console.log('✅ Client provided payment proof - skipping server-side payment attempts');
-      // Go directly to payment verification below
-    } else {
-      // No payment proof yet - check for free credits or server-side payment
-      // Check if user is authenticated
-      if (req.isAuthenticated && req.isAuthenticated()) {
-        try {
-          const userId = req.user.id;
-          const user = await getUserById(userId);
-          
-          // First, check if user has free analysis credits
-          if (user && user.freeAnalysisCredits && user.freeAnalysisCredits > 0) {
-            // User has free credits - use one credit
-            const users = await loadUsers();
-            const userIndex = users.findIndex(u => u.id === userId);
-            if (userIndex >= 0) {
-              users[userIndex].freeAnalysisCredits = Math.max(0, (users[userIndex].freeAnalysisCredits || 0) - 1);
-              await saveUsers(users);
+
+        
+        // First, check which chains have wallets (to avoid errors on chains without wallets)
+        const availableChains = [];
+        for (const chain of allChains) {
+          try {
+            const address = await 
+            if (address) {
+              // Validate it's not a contract address
+              const network = 
+              if (network && network.usdcContract) {
+                // Check if address matches USDC contract address (invalid wallet)
+                if (address.toLowerCase() === network.usdcContract.toLowerCase()) {
+                  console.log(`⚠️ Skipping ${chain} - wallet address is the USDC contract address (likely no wallet created)`);
+                  balanceErrors[chain] = `No ${chain} wallet found. Please create a ${chain} wallet first.`;
+                  continue;
+                }
+              }
               
-              // Add free credit payment header
-              req.headers['x-payment'] = Buffer.from(`free-credit-${Date.now()}`).toString('base64');
-              req.headers['x-payment-source'] = 'free-credit';
+              // Additional validation for Ethereum - check if it's a valid wallet address format
+              if (chain === 'ethereum' || chain === 'base' || chain === 'bnb') {
+                const { ethers } = require('ethers');
+                if (!ethers.utils.isAddress(address)) {
+                  console.log(`⚠️ Skipping ${chain} - invalid wallet address format: ${address}`);
+                  balanceErrors[chain] = `Invalid ${chain} wallet address. Please create a new ${chain} wallet.`;
+                  continue;
+                }
+              }
               
-              console.log(`🎁 Free analysis credit used. Remaining: ${users[userIndex].freeAnalysisCredits}`);
-              return next();
+              availableChains.push(chain);
+              console.log(`✅ ${chain.toUpperCase()} wallet found: ${address.substring(0, 10)}...`);
             }
+          } catch (error) {
+            console.log(`⚠️ No ${chain.toUpperCase()} wallet found: ${error.message}`);
+            balanceErrors[chain] = `No ${chain} wallet found. Please create a ${chain} wallet first.`;
+            // Skip this chain - user doesn't have a wallet for it
+            continue;
           }
-          
-          // No free credits and no payment proof - return 402 for client-side payment
-          console.log(`💳 No payment proof provided - requesting client-side payment (Phantom wallet)`);
+        }
+        
+        if (availableChains.length === 0) {
+          console.log(`❌ No wallets found for any chain. User needs to create at least one wallet.`);
           return res.status(402).json({
-            message: 'Payment Required - Please pay via x402 protocol with your Phantom wallet',
+            message: 'Payment Required - Please create a wallet first',
             authenticated: true,
             balance: 0,
             required: parseFloat(requiredAmount),
             walletAddress: '',
             freeCredits: user?.freeAnalysisCredits || 0,
-            balanceErrors: {},
-            note: 'Please connect your Phantom wallet and pay via x402 protocol.',
+            balanceErrors: balanceErrors,
+            note: 'No wallets found. Please create a wallet (Solana, Base, Ethereum, or BNB) to make payments.',
             accepts: [
               {
                 scheme: 'exact',
@@ -1442,44 +995,143 @@ const x402PaymentMiddleware = (requiredAmount) => {
                 currency: 'USDC',
                 amount: requiredAmount,
                 recipient: getRecipientWallet('solana'),
-                facilitator: CONFIG.facilitatorUrlSolana,
-                usdcMint: walletService.NETWORKS.solana.usdcMint
-              }
-            ]
-          });
-        } catch (error) {
-          console.error('Payment check error:', error);
-          // Fall through to payment verification
-        }
-      }
-      
-      // No payment header and not authenticated or no free credits - request payment
-      if (!paymentHeader) {
-        return res.status(402).json({
-          message: 'Payment Required - Please pay with your Phantom wallet',
-          authenticated: req.isAuthenticated && req.isAuthenticated() ? true : false,
-          accepts: [
-            {
-              scheme: 'exact',
-              network: 'solana',
-              currency: 'USDC',
-              amount: requiredAmount,
-              recipient: getRecipientWallet('solana'),
-              facilitator: CONFIG.facilitatorUrlSolana,
-              usdcMint: walletService.NETWORKS.solana.usdcMint
+                facilitator: CONFIG.                usdcMint: 
+        
+        // Direct payment approach: Try payment on each available chain
+        // sendPayment function will verify balance on-chain using Helius RPC
+        for (const chain of availableChains) {
+          try {
+            console.log(`\n🔄 Attempting payment on ${chain.toUpperCase()}...`);
+            console.log(`📤 Calling sendPayment - will verify balance on-chain using Helius RPC`);
+            
+            // Attempt payment directly - sendPayment will:
+            // 1. Use Helius RPC (for Solana)
+            // 2. Verify balance on-chain
+            // 3. Send USDC to recipient address from .env
+            paymentResult = await 
+            selectedChain = chain;
+            
+            console.log(`\n✅✅✅ PAYMENT SUCCESSFUL on ${chain.toUpperCase()}! ✅✅✅`);
+            console.log(`📝 Transaction Hash: ${paymentResult.txHash}`);
+            console.log(`💰 Amount: ${paymentResult.amount} USDC`);
+            console.log(`📤 From: ${paymentResult.from}`);
+            console.log(`📥 To: ${paymentResult.to}`);
+            console.log(`🔗 Chain: ${paymentResult.chain}`);
+            
+            break; // Success! Exit loop
+            
+          } catch (paymentError) {
+            console.error(`\n❌ Payment failed on ${chain.toUpperCase()}:`, paymentError.message);
+            console.error(`   Error details:`, {
+              message: paymentError.message,
+              stack: paymentError.stack,
+              name: paymentError.name
+            });
+            balanceErrors[chain] = paymentError.message;
+            
+            // Log the error but continue to next chain
+            if (paymentError.message && paymentError.message.includes('Insufficient balance')) {
+              console.log(`⚠️ Insufficient balance on ${chain} - trying next chain...`);
+            } else if (paymentError.message && (paymentError.message.includes('429') || paymentError.message.includes('rate limit'))) {
+              console.log(`⚠️ Rate limit on ${chain} - trying next chain...`);
+            } else if (paymentError.message && paymentError.message.includes('No wallet')) {
+              console.log(`⚠️ No wallet on ${chain} - skipping...`);
+            } else {
+              console.log(`⚠️ Payment error on ${chain} - trying next chain...`);
             }
-          ]
-        });
+            continue;
+          }
+        }
+        
+        if (paymentResult && selectedChain) {
+          // Add payment proof header with chain info (x402-compatible)
+          const paymentProof = Buffer.from(JSON.stringify({
+            txHash: paymentResult.txHash,
+            chain: selectedChain,
+            source: 'server-wallet-x402'
+          })).toString('base64');
+          req.headers['x-payment'] = paymentProof;
+          req.headers['x-payment-source'] = 'server-wallet-x402';
+          req.headers['x-payment-chain'] = selectedChain;
+          
+          console.log(`💳 Server-side x402-compatible payment processed on ${selectedChain}: ${paymentResult.txHash}`);
+          return next();
+        } else {
+          // All payment attempts failed - return 402 with all x402 options
+          // Don't try to get balance again (might cause more rate limits)
+          console.log(`⚠️ All payment attempts failed. Returning 402.`, {
+            balanceErrors,
+            required: requiredAmount,
+            chainsAttempted: availableChains.length > 0 ? availableChains : allChains,
+            availableChainsCount: availableChains.length
+          });
+          
+          // Try to get wallet address without checking balance
+          let walletAddress = '';
+          try {
+            const addresses = await 
+            walletAddress = addresses.solana || addresses.base || '';
+          } catch (e) {
+            console.warn('Could not get wallet address:', e.message);
+          }
+          
+          // Filter out SOL-related errors for Crossmint (Crossmint handles fees automatically)
+          const filteredBalanceErrors = {};
+          for (const [chain, error] of Object.entries(balanceErrors)) {
+            // Skip SOL fee errors for Crossmint wallets (they don't need SOL)
+            if (chain === 'solana-crossmint' && error && error.includes('Insufficient SOL')) {
+              console.log(`⚠️ Filtering out SOL error for ${chain} - Crossmint handles fees automatically`);
+              continue; // Don't include this error
+            }
+            // Also filter out SOL errors from regular Solana if Crossmint is available (to avoid confusion)
+            if (chain === 'solana' && error && error.includes('Insufficient SOL')) {
+              const hasCrossmint = availableChains.includes('solana-crossmint');
+              if (hasCrossmint) {
+                console.log(`⚠️ Filtering out SOL error for regular ${chain} - Crossmint wallet is available`);
+                continue; // Don't show SOL error if Crossmint is available
+              }
+            }
+            filteredBalanceErrors[chain] = error;
+          }
+          
+          return res.status(402).json({
+            message: 'Payment Required - Please pay via x402 protocol',
+            authenticated: true,
+            balance: 0, // Don't try to fetch balance (rate limit risk)
+            required: parseFloat(requiredAmount),
+            walletAddress: walletAddress,
+            freeCredits: user?.freeAnalysisCredits || 0,
+            balanceErrors: filteredBalanceErrors, // Filtered errors (SOL errors removed for Crossmint)
+            note: 'Payment attempts failed. Please try again or use x402 client-side payment.',
+            accepts: [
+              {
+                scheme: 'exact',
+                network: 'solana',
+                currency: 'USDC',
+                amount: requiredAmount,
+                recipient: getRecipientWallet('solana'),
+                facilitator: CONFIG.                usdcMint: 
+        // Fall through to manual payment flow
       }
     }
     
-    // Payment proof provided - verify it
-    // Client-side payment flow (Phantom wallet)
-    // (paymentHeader already checked above, so we know it exists here)
+    // Manual payment flow (MetaMask/wallet connection) or unauthenticated users
+    const paymentHeader = req.headers['x-payment'];
 
-    try {
-      // Decode payment proof (base64 encoded transaction hash or free credit identifier)
-      const paymentProof = Buffer.from(paymentHeader, 'base64').toString('utf-8');
+    if (!paymentHeader) {
+      // Payment required - return 402 with all x402-supported chains (Solana, Base, Ethereum, BNB)
+      // Prioritize Solana first since users typically have funds there
+      return res.status(402).json({
+        message: 'Payment Required for AI Analysis',
+        authenticated: req.isAuthenticated && req.isAuthenticated() ? true : false,
+        accepts: [
+          {
+            scheme: 'exact',
+            network: 'solana',
+            currency: 'USDC',
+            amount: requiredAmount,
+            recipient: getRecipientWallet('solana'),
+            facilitator: CONFIG.            usdcMint: 
       
       // Check if this is a free credit
       if (paymentProof.startsWith('free-credit-')) {
@@ -1497,12 +1149,12 @@ const x402PaymentMiddleware = (requiredAmount) => {
       try {
         const paymentData = JSON.parse(paymentProof);
         txHash = paymentData.txHash;
-        chain = paymentData.chain || 'solana';
+        chain = paymentData.chain || 'base';
         paymentSource = paymentData.source || 'manual';
       } catch (e) {
-        // Legacy format - plain txHash, assume Solana
+        // Legacy format - plain txHash, assume Base
         txHash = paymentProof;
-        chain = 'solana';
+        chain = 'base';
         paymentSource = 'manual';
       }
 
@@ -1523,100 +1175,111 @@ const x402PaymentMiddleware = (requiredAmount) => {
       if (chain === 'solana') {
         // Verify Solana USDC transfer transaction
         const { Connection, PublicKey } = require('@solana/web3.js');
-        const { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } = require('@solana/spl-token');
-        const connection = walletService.getSolanaConnection();
+        const { getAssociatedTokenAddress } = require('@solana/spl-token');
+        const connection = 
         
         try {
           const signature = txHash;
-          console.log('🔍 Verifying Solana transaction:', signature);
-          
-          // Try to fetch transaction, but if RPC fails, trust frontend confirmation
-          let tx = null;
-          let rpcError = null;
-          
-          try {
-            // Try to get transaction with version support
-            tx = await connection.getTransaction(signature, {
-              commitment: 'confirmed',
-              maxSupportedTransactionVersion: 0
+          const tx = await connection.getTransaction(signature, {
+            commitment: 'confirmed',
+            maxSupportedTransactionVersion: 0
+          });
+
+          if (!tx) {
+            return res.status(402).json({
+              error: 'Invalid payment proof',
+              message: 'Solana transaction not found'
             });
-            
-            if (!tx) {
-              // Try without version limit (for versioned transactions)
-              console.log('⚠️ Transaction not found with version 0, trying without version limit...');
-              tx = await connection.getTransaction(signature, {
-                commitment: 'confirmed'
-              });
-              
-              if (tx) {
-                console.log('✅ Found versioned transaction');
+          }
+
+          if (tx.meta && tx.meta.err) {
+            return res.status(402).json({
+              error: 'Invalid payment proof',
+              message: 'Solana transaction failed'
+            });
+          }
+
+          // Verify USDC transfer to recipient
+          const recipientPublicKey = new PublicKey(getRecipientWallet('solana'));
+          const usdcMint = new PublicKey(
+          const recipientTokenAddress = await getAssociatedTokenAddress(
+            usdcMint,
+            recipientPublicKey
+          );
+          
+          // Parse transaction to find USDC transfer
+          let paymentVerified = false;
+          let transferAmount = 0;
+          
+          if (tx.meta && tx.meta.preTokenBalances && tx.meta.postTokenBalances) {
+            // Check token balance changes for recipient's USDC account
+            for (const postBalance of tx.meta.postTokenBalances) {
+              if (postBalance.accountIndex !== undefined) {
+                const accountKey = tx.transaction.message.accountKeys[postBalance.accountIndex];
+                if (accountKey && accountKey.toString() === recipientTokenAddress.toString()) {
+                  // Found recipient's USDC account
+                  const preBalance = tx.meta.preTokenBalances.find(
+                    pre => pre.accountIndex === postBalance.accountIndex
+                  );
+                  
+                  const preAmount = preBalance ? parseFloat(preBalance.uiTokenAmount.uiAmountString || '0') : 0;
+                  const postAmount = parseFloat(postBalance.uiTokenAmount.uiAmountString || '0');
+                  
+                  // Check if USDC mint matches
+                  if (postBalance.mint === usdcMint.toString()) {
+                    transferAmount = postAmount - preAmount;
+                    if (transferAmount >= parseFloat(requiredAmount)) {
+                      paymentVerified = true;
+                      break;
+                    }
+                  }
+                }
               }
             }
-          } catch (fetchError) {
-            // RPC fetch failed - but frontend already confirmed transaction on-chain
-            rpcError = fetchError;
-            console.warn('⚠️ RPC fetch failed, but frontend confirmed transaction on-chain:', fetchError.message);
-            console.log('   Trusting frontend confirmation - transaction signature:', signature);
           }
-
-          // If we successfully fetched the transaction, verify it
-          if (tx) {
-            // Check if transaction has error
-            if (tx.meta && tx.meta.err) {
-              console.error('❌ Transaction has error:', tx.meta.err);
-              return res.status(402).json({
-                error: 'Invalid payment proof',
-                message: 'Solana transaction failed'
-              });
+          
+          // Alternative: Check instruction data for transfer
+          if (!paymentVerified && tx.transaction && tx.transaction.message && tx.transaction.message.instructions) {
+            for (const instruction of tx.transaction.message.instructions) {
+              if (instruction.programId) {
+                const programId = instruction.programId.toString();
+                // Token Program: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+                if (programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' || 
+                    programId === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') {
+                  // This is a token transfer instruction
+                  // We'll trust the balance change check above
+                  // If balance check found the transfer, we're good
+                }
+              }
             }
-
-            // Transaction exists and has no error - payment verified!
-            console.log('✅✅✅ Transaction verified via RPC! ✅✅✅');
-            console.log('   Transaction signature:', signature);
-          } else if (rpcError) {
-            // RPC failed but frontend confirmed - trust frontend
-            console.log('✅✅✅ Trusting frontend confirmation (RPC unavailable) ✅✅✅');
-            console.log('   Transaction signature:', signature);
-            console.log('   Frontend confirmed transaction on-chain - accepting payment');
-          } else {
-            // Transaction not found in RPC
-            console.warn('⚠️ Transaction not found in RPC, but frontend confirmed it');
-            console.log('   Trusting frontend confirmation - transaction signature:', signature);
-            console.log('   Note: Transaction may be too new or RPC may be out of sync');
           }
 
-          // Accept payment - either verified via RPC or trusted from frontend confirmation
+          if (!paymentVerified) {
+            return res.status(402).json({
+              error: 'Invalid payment proof',
+              message: `Solana transaction does not show USDC transfer of at least ${requiredAmount} USDC to recipient`
+            });
+          }
+
           res.setHeader('X-PAYMENT-RESPONSE', Buffer.from(JSON.stringify({
             verified: true,
             txHash: signature,
             chain: 'solana',
-            amount: requiredAmount,
-            timestamp: new Date().toISOString(),
-            verificationMethod: tx ? 'rpc' : 'frontend-confirmed'
+            amount: transferAmount.toFixed(6),
+            timestamp: new Date().toISOString()
           })).toString('base64'));
 
           return next();
         } catch (solanaError) {
-          // Even if there's an error, if frontend confirmed, trust it
           console.error('Solana payment verification error:', solanaError);
-          console.log('⚠️ RPC error, but frontend confirmed transaction - accepting payment');
-          console.log('   Transaction signature:', txHash);
-          
-          // Trust frontend confirmation - accept payment
-          res.setHeader('X-PAYMENT-RESPONSE', Buffer.from(JSON.stringify({
-            verified: true,
-            txHash: txHash,
-            chain: 'solana',
-            amount: requiredAmount,
-            timestamp: new Date().toISOString(),
-            verificationMethod: 'frontend-confirmed-fallback'
-          })).toString('base64'));
-
-          return next();
+          return res.status(402).json({
+            error: 'Payment verification failed',
+            message: `Solana verification error: ${solanaError.message}`
+          });
         }
       } else {
         // Verify EVM transaction (Base, Ethereum, BNB)
-        const network = walletService.NETWORKS[chain];
+        const network = 
         if (!network || !network.rpcUrl) {
           return res.status(402).json({
             error: 'Invalid chain',
@@ -1779,19 +1442,6 @@ app.post('/api/auth/logout', (req, res) => {
 // ===== Wallet Routes =====
 
 // Clear balance cache endpoint (for debugging)
-app.post('/api/wallet/clear-cache', requireAuth, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const chain = (req.body.chain || 'solana').toLowerCase();
-    
-    // Clear cache for the specified chain
-    walletService.clearCachedBalance(userId, chain);
-    
-    res.json({
-      success: true,
-      message: `Balance cache cleared for ${chain}`,
-      chain: chain
-    });
   } catch (error) {
     console.error('Error clearing cache:', error);
     res.status(500).json({
@@ -1817,9 +1467,7 @@ app.get('/api/wallet', requireAuth, async (req, res) => {
     }
     
     try {
-      // Check if force refresh is requested
-      const forceRefresh = req.query.refresh === 'true' || req.query.force === 'true';
-      const balanceInfo = await walletService.getUSDCBalance(userId, chain, forceRefresh);
+      const balanceInfo = await 
       
       const response = {
         address: balanceInfo.address,
@@ -1827,13 +1475,12 @@ app.get('/api/wallet', requireAuth, async (req, res) => {
         balanceWei: balanceInfo.balanceWei || null,
         currency: 'USDC',
         chain: chain,
-        network: walletService.NETWORKS[chain]?.name || chain
-      };
+        network: 
       
       // For Solana wallets, also include SOL balance (needed for transaction fees)
       if (chain === 'solana') {
         try {
-          const solBalance = await walletService.getSOLBalance(userId);
+          const solBalance = await 
           response.solBalance = solBalance.balance;
           response.solBalanceLamports = solBalance.balanceLamports;
         } catch (solError) {
@@ -1854,10 +1501,10 @@ app.get('/api/wallet', requireAuth, async (req, res) => {
       
       // If balance fetch fails, try to at least return the wallet address
       try {
-        const address = await walletService.getWalletAddress(userId, chain);
+        const address = await 
         if (address) {
           // Validate it's not a contract address
-          const network = walletService.NETWORKS[chain];
+          const network = 
           if (network && network.usdcContract && address.toLowerCase() === network.usdcContract.toLowerCase()) {
             throw new Error(`Wallet address cannot be the USDC contract address. Please check your ${chain} wallet configuration.`);
           }
@@ -1870,11 +1517,7 @@ app.get('/api/wallet', requireAuth, async (req, res) => {
             balanceWei: null,
             currency: 'USDC',
             chain: chain,
-            network: walletService.NETWORKS[chain]?.name || chain,
-            note: balanceError.message && balanceError.message.includes('401') 
-              ? 'Balance check failed (authentication issue), but payment will verify balance on-chain'
-              : 'Balance check failed, but payment will verify balance on-chain'
-          });
+            network: 
           return;
         }
       } catch (addressError) {
@@ -1901,14 +1544,14 @@ app.get('/api/wallet/all', requireAuth, async (req, res) => {
     // Get addresses (should always work - they're generated from private keys)
     let addresses = {};
     try {
-      addresses = await walletService.getAllWalletAddresses(userId);
+      addresses = await 
     } catch (addressError) {
       console.error('Error getting wallet addresses:', addressError);
       // Try to get addresses one by one as fallback
       const chains = ['base', 'ethereum', 'bnb', 'solana', 'solana-crossmint'];
       for (const chain of chains) {
         try {
-          addresses[chain] = await walletService.getWalletAddress(userId, chain);
+          addresses[chain] = await 
         } catch (e) {
           console.error(`Failed to get ${chain} address:`, e);
           addresses[chain] = null;
@@ -1923,13 +1566,13 @@ app.get('/api/wallet/all', requireAuth, async (req, res) => {
     // Fetch balances in parallel but handle each chain independently
     const balancePromises = allChains.map(async (chain) => {
       try {
-        const balanceInfo = await walletService.getUSDCBalance(userId, chain);
+        const balanceInfo = await 
         return { chain, balance: balanceInfo.balance };
       } catch (error) {
         console.error(`Error getting ${chain} balance:`, error.message);
         // Try to at least get the address to show wallet exists
         try {
-          const address = await walletService.getWalletAddress(userId, chain);
+          const address = await 
           if (address) {
             // Return 0 balance but wallet exists
             return { chain, balance: '0' };
@@ -1958,9 +1601,7 @@ app.get('/api/wallet/all', requireAuth, async (req, res) => {
         wallets[chain] = {
           address: addresses[chain],
           balance: balances[chain] || '0',
-          network: walletService.NETWORKS[chain]?.name || (chain === 'solana-crossmint' ? 'Solana Crossmint' : chain),
-          currency: 'USDC'
-        };
+          network: 
       } else if (chain === 'solana-crossmint') {
         // For Crossmint, include null entry so frontend knows to show create button
         // Don't include it if Crossmint is not configured at all
@@ -1994,30 +1635,6 @@ app.get('/api/wallet/all', requireAuth, async (req, res) => {
 });
 
 // Check if Crossmint is configured
-app.get('/api/wallet/crossmint-status', requireAuth, async (req, res) => {
-  try {
-    const crossmintService = require('./crossmint-service');
-    const isConfigured = crossmintService.isCrossmintConfigured();
-    
-    // Debug logging
-    console.log('🔍 Crossmint status check:', {
-      hasApiKey: !!process.env.CROSSMINT_API_KEY,
-      hasProjectId: !!process.env.CROSSMINT_PROJECT_ID,
-      isConfigured: isConfigured,
-      apiKeyPrefix: process.env.CROSSMINT_API_KEY ? process.env.CROSSMINT_API_KEY.substring(0, 10) + '...' : 'missing',
-      projectId: process.env.CROSSMINT_PROJECT_ID || 'missing'
-    });
-    
-    // Also check if user already has a Crossmint wallet
-    const userId = req.user.id;
-    const user = await getUserById(userId);
-    const hasWallet = !!(user?.wallets?.['solana-crossmint']?.address);
-    
-    res.json({
-      configured: isConfigured,
-      hasWallet: hasWallet,
-      shouldShowButton: isConfigured && !hasWallet
-    });
   } catch (error) {
     console.error('Error checking Crossmint status:', error);
     res.json({
@@ -2112,23 +1729,10 @@ app.post('/api/wallet/create-crossmint', requireAuth, async (req, res) => {
 });
 
 // Refresh wallet balance for a specific chain
-app.post('/api/wallet/refresh', requireAuth, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const chain = (req.body.chain || req.query.chain || 'base').toLowerCase();
-    
-    // Validate chain
-    const supportedChains = ['base', 'ethereum', 'bnb', 'solana', 'solana-crossmint'];
-    if (!supportedChains.includes(chain)) {
-      return res.status(400).json({
-        error: 'Invalid chain',
-        message: `Supported chains: ${supportedChains.join(', ')}`
-      });
     }
     
     try {
-      // Force refresh when using refresh endpoint
-      const balanceInfo = await walletService.getUSDCBalance(userId, chain, true);
+      const balanceInfo = await 
       
       res.json({
         balance: balanceInfo.balance,
@@ -2140,7 +1744,7 @@ app.post('/api/wallet/refresh', requireAuth, async (req, res) => {
       
       // Try to at least return the wallet address even if balance fetch fails
       try {
-        const address = await walletService.getWalletAddress(userId, chain);
+        const address = await 
         if (address) {
           // Return wallet address with balance 0 if balance fetch failed
           return res.json({
@@ -2170,16 +1774,6 @@ app.post('/api/wallet/refresh', requireAuth, async (req, res) => {
 });
 
 // Process payment - Server-side x402-compatible payments from wallet funds
-app.post('/api/wallet/pay', requireAuth, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { amount, chain = 'base' } = req.body;
-    
-    if (!amount) {
-      return res.status(400).json({
-        error: 'Amount required',
-        message: 'Payment amount must be specified'
-      });
     }
     
     // Validate chain
@@ -2195,23 +1789,12 @@ app.post('/api/wallet/pay', requireAuth, async (req, res) => {
     
     // Check balance and process payment server-side (x402-compatible)
     try {
-      const balanceInfo = await walletService.getUSDCBalance(userId, selectedChain);
+      const balanceInfo = await 
       const balance = parseFloat(balanceInfo.balance);
       
       if (balance < parseFloat(amount)) {
         // Insufficient balance - return 402 with x402 payment options
-        const facilitatorUrls = {
-          base: CONFIG.facilitatorUrl,
-          solana: CONFIG.facilitatorUrlSolana,
-          ethereum: CONFIG.facilitatorUrlEthereum,
-          bnb: CONFIG.facilitatorUrlBnb
-        };
-        
-        const network = walletService.NETWORKS[selectedChain];
-        
-        return res.status(402).json({
-          message: 'Insufficient balance - Please pay via x402 protocol',
-          balance: balance,
+        const           solana: CONFIG.          ethereum: CONFIG.          bnb: CONFIG.          balance: balance,
           required: parseFloat(amount),
           walletAddress: balanceInfo.address,
           accepts: [{
@@ -2220,16 +1803,9 @@ app.post('/api/wallet/pay', requireAuth, async (req, res) => {
             currency: 'USDC',
             amount: amount,
             recipient: getRecipientWallet(selectedChain),
-            facilitator: facilitatorUrls[selectedChain],
-            ...(selectedChain === 'solana' 
+            facilitator:             ...(selectedChain === 'solana' 
               ? { usdcMint: network.usdcMint }
-              : { usdcContract: network.usdcContract })
-          }]
-        });
-      }
-      
-      // Process payment server-side (x402-compatible)
-      const paymentResult = await walletService.sendPayment(userId, amount, selectedChain);
+              : {  amount, selectedChain);
       
       res.json({
         success: true,
@@ -5542,41 +5118,12 @@ app.post('/api/analyze', async (req, res) => {
     let userId = null;
 
     if (!isPreview) {
-      if (!(req.isAuthenticated && req.isAuthenticated())) {
-        return res.status(401).json({
-          error: 'Authentication required',
-          code: 'auth_required'
-        });
+      // Open-source: Authentication optional, no subscription required
+      // Users provide their own API keys
+    });
       }
 
-      userId = req.user.id;
-      try {
-        subscriptionStatus = await subscriptionService.getSubscriptionStatus(userId);
-      } catch (statusError) {
-        console.error('Error loading subscription status:', statusError);
-        return res.status(500).json({
-          error: 'subscription_error',
-          message: 'Unable to verify subscription status'
-        });
-      }
-
-      if (!subscriptionStatus || subscriptionStatus.status !== 'active' || !subscriptionStatus.planId) {
-        return res.status(402).json({
-          error: 'subscription_required',
-          message: 'An active subscription is required to run AI analysis.',
-          plans: subscriptionService.getPlans()
-        });
-      }
-
-      if ((subscriptionStatus.cuBalance || 0) < ANALYSIS_CU_COST) {
-        return res.status(402).json({
-          error: 'insufficient_cu',
-          message: 'You do not have enough compute units to run this analysis.',
-          remainingCu: subscriptionStatus.cuBalance || 0,
-          requiredCu: ANALYSIS_CU_COST,
-          plans: subscriptionService.getPlans(),
-          subscription: subscriptionStatus
-        });
+      // Open-source: No CU checks);
       }
     }
 
@@ -5727,15 +5274,7 @@ app.post('/api/sdk/analyze', async (req, res) => {
       });
     }
 
-    if ((subscriptionStatus.cuBalance || 0) < ANALYSIS_CU_COST) {
-      return res.status(402).json({
-        error: 'insufficient_cu',
-        message: 'Insufficient compute units remaining for this request.',
-        remainingCu: subscriptionStatus.cuBalance || 0,
-        requiredCu: ANALYSIS_CU_COST,
-        plans: subscriptionService.getPlans(),
-        subscription: subscriptionStatus
-      });
+    // Open-source: No CU checks);
     }
 
     const { analysis, llmUsed, comprehensiveData } = await performTokenAnalysis({
@@ -9501,16 +9040,29 @@ async function startServer() {
   }, 5 * 60 * 1000); // 5 minutes
 
   // Function to analyze bonding tokens and choose the best one
+  // NOTE: This is the heart of the open‑source AI Token Calls logic.
+  // We've tightened filters and added optional Grok Twitter sentiment
+  // to make calls more precise and higher quality.
   async function analyzeBondingTokens(tokens) {
-    try {
-      // Filter tokens with good metrics
+  try {
+      // Filter tokens with strong on‑chain fundamentals
       const filteredTokens = tokens.filter(token => {
         const progress = parseFloat(token.bondingCurveProgress || 0);
         const liquidity = parseFloat(token.liquidity || 0);
         const fdv = parseFloat(token.fullyDilutedValuation || 0);
+        const buys = parseFloat(token.buys || token.buyCount || 0);
+        const sells = parseFloat(token.sells || token.sellCount || 0);
+        const txCount = buys + sells;
         
-        // Prefer tokens that are early on bonding curve (low progress) but have some liquidity
-        return progress < 50 && liquidity > 100 && fdv > 1000;
+        // Prefer tokens that:
+        // - Are early on the bonding curve (progress < 40%)
+        // - Have meaningful liquidity (> $2,000)
+        // - Have non‑trivial FDV (> $5,000)
+        // - Have some trading activity (> 10 trades)
+        return progress > 1 && progress < 40 &&
+               liquidity > 2000 &&
+               fdv > 5000 &&
+               txCount >= 10;
       });
 
       if (filteredTokens.length === 0) {
@@ -9533,11 +9085,14 @@ async function startServer() {
 
             const holderCount = holdersRes.data?.total || 0;
 
-            // Calculate score
+            // Calculate base score (on‑chain only)
             const progress = parseFloat(token.bondingCurveProgress || 0);
             const liquidity = parseFloat(token.liquidity || 0);
             const fdv = parseFloat(token.fullyDilutedValuation || 0);
             const priceUsd = parseFloat(token.priceUsd || 0);
+            const buys = parseFloat(token.buys || token.buyCount || 0);
+            const sells = parseFloat(token.sells || token.sellCount || 0);
+            const txCount = buys + sells;
 
             // RugCheck validation - skip tokens that are not safe/low-risk
             const rugCheck = await fetchRugCheckAnalysis(token.tokenAddress, { allowCached: true });
@@ -9546,18 +9101,65 @@ async function startServer() {
               return null;
             }
 
-            // Score: lower progress = better, more holders = better, reasonable liquidity
-            const score = (100 - progress) * 0.4 + 
-                        Math.min(holderCount / 100, 1) * 30 + 
-                        Math.min(liquidity / 10000, 1) * 20 +
-                        (priceUsd > 0 ? 10 : 0);
+            // Base score: lower progress = better, more holders/liquidity/activity = better
+            let score = 0;
+            score += (100 - progress) * 0.35;                        // earlier in curve
+            score += Math.min(holderCount / 150, 1) * 25;            // holder distribution
+            score += Math.min(liquidity / 15000, 1) * 20;            // liquidity depth
+            score += Math.min(txCount / 50, 1) * 10;                 // trading activity
+            score += (priceUsd > 0 ? 5 : 0);                         // price available
+
+            // Optional: Twitter / X sentiment via Grok (if configured)
+            let twitterSentiment = null;
+            let sentimentNote = '';
+            if (CONFIG.grokApiKey) {
+              try {
+                const grokText = await fetchGrokTwitterInsights(
+                  token.name || token.symbol || 'token',
+                  token.symbol || 'UNKNOWN',
+                  token.tokenAddress,
+                  {
+                    price: priceUsd,
+                    marketCap: fdv,
+                    volume24h: token.volume24h || 0,
+                    liquidity,
+                    holders: holderCount,
+                    chain: 'solana'
+                  }
+                );
+
+                if (grokText && grokText.trim().length > 0) {
+                  // Try to extract sentiment label from Grok response
+                  const sentimentMatch = grokText.match(/Sentiment:\s*\*?\*?(Bullish|Bearish|Neutral)\*?\*?/i);
+                  twitterSentiment = sentimentMatch ? sentimentMatch[1].toUpperCase() : null;
+
+                  // Adjust score slightly based on sentiment
+                  if (twitterSentiment === 'BULLISH') {
+                    score += 10;
+                    sentimentNote = ' | Twitter sentiment: Bullish (via Grok)';
+                  } else if (twitterSentiment === 'BEARISH') {
+                    score -= 10;
+                    sentimentNote = ' | Twitter sentiment: Bearish (via Grok)';
+                  } else if (twitterSentiment === 'NEUTRAL') {
+                    score += 2;
+                    sentimentNote = ' | Twitter sentiment: Neutral (via Grok)';
+                  }
+
+                  // Store a short truncated version of Grok output for UI if needed
+                  token.grokInsights = grokText.substring(0, 1200);
+                }
+              } catch (grokError) {
+                console.warn(`  ⚠️ Grok sentiment fetch failed for ${token.name || token.tokenAddress}:`, grokError.message);
+              }
+            }
 
             return {
               ...token,
               holderCount,
               score,
               rugCheck,
-              aiReason: `Early stage (${progress.toFixed(1)}% bonding), ${holderCount} holders, $${liquidity.toFixed(0)} liquidity | RugCheck ${rugCheck.status}`
+              twitterSentiment,
+              aiReason: `Early stage (${progress.toFixed(1)}% bonding), ${holderCount} holders, $${liquidity.toFixed(0)} liquidity, ${txCount} trades | RugCheck ${rugCheck.status}${sentimentNote}`
             };
           } catch (error) {
             console.error(`Error enriching token ${token.tokenAddress}:`, error.message);
